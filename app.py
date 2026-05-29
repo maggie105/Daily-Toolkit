@@ -99,6 +99,24 @@ st.markdown("""
         display: flex;
         align-items: center;
     }
+
+    /* 🎨 【本次核心更新】強制重塑右上角 Toast 視窗為北歐簡約風 */
+    div[data-testid="stToast"] {
+        background-color: #f8fafc !important; /* 質感蛋殼淺米白 */
+        border: 1px solid #cbd5e1 !important;  /* 柔和藍灰細邊框 */
+        border-radius: 8px !important;         /* 優雅小圓角 */
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important; /* 精緻微陰影 */
+    }
+    /* 強制修改 Toast 內文的字體顏色與粗細，確保清晰易讀 */
+    div[data-testid="stToast"] .stMarkdown p {
+        color: #334155 !important;            /* 深冷灰色字體 */
+        font-weight: 500 !important;          /* 字體微加粗 */
+        font-size: 14px !important;
+    }
+    /* 修改右側關閉小叉叉的顏色 */
+    div[data-testid="stToast"] button {
+        color: #64748b !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -236,7 +254,6 @@ def post_process_steps():
         raw_date_text = sheet_source.acell('B1').value 
         found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
         if len(found_dates) >= 2:
-            # 轉換為 MMDD 格式
             d1 = found_dates[0].replace("-", "")[4:]
             d2 = found_dates[1].replace("-", "")[4:]
             final_date_str = f"{d1}-{d2}"
@@ -263,7 +280,7 @@ with st.sidebar:
         ["📊 BS銷售更新", "➕ 其他自動化腳本"]
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V1.8 (版面微調優化版)")
+    st.caption("✨ 目前版本: V1.9 (通知美化完全體)")
 
 # ==================== 🖥️ 右側主畫面呈現 ====================
 if app_mode == "📊 BS銷售更新":
@@ -283,28 +300,28 @@ if app_mode == "📊 BS銷售更新":
     with col1:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
         
-        # 📌 01. 庫存清單 (全新優化中等標題)
+        # 📌 01. 庫存清單
         st.markdown('<div class="custom-section-title">📁 01. 庫存清單</div>', unsafe_allow_html=True)
         uploaded_files_01 = st.file_uploader("請上傳「库存清单*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="u01")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 📌 02. 在線產品 (全新優化中等標題)
+        # 📌 02. 在線產品
         st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
         uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx'] 檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
+        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
         
-        # 📌 03. 銷量報告 (全新優化中等標題)
+        # 📌 03. 銷量報告
         st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
         uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 📌 04. 利潤報告 (全新優化中等標題)
+        # 📌 04. 利潤報告
         st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
         uploaded_file_04 = st.file_uploader("請上傳「商品利润*.xlsx」檔案 (單選)", type=["xlsx"], key="u04")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -322,7 +339,7 @@ if app_mode == "📊 BS銷售更新":
             with st.spinner("系統正在全速運算、清洗與同步數據，請稍候..."):
                 # --- 任務 01 ---
                 if uploaded_files_01:
-                    st.toast("正在處理 01.庫存清單...")
+                    st.toast("⏳ 正在處理 01.庫存清單...")
                     list_dfs = []
                     for f in uploaded_files_01:
                         res_df = safe_read_and_align_uploaded(f, HEADERS_01, "01")
@@ -337,7 +354,7 @@ if app_mode == "📊 BS銷售更新":
 
                 # --- 任務 02 ---
                 if uploaded_files_lan or uploaded_files_onl:
-                    st.toast("正在處理 02.在線產品更新...")
+                    st.toast("⏳ 正在處理 02.在線產品更新...")
                     lan_dfs, onl_dfs = [], []
                     
                     for f in uploaded_files_lan:
@@ -363,7 +380,7 @@ if app_mode == "📊 BS銷售更新":
 
                 # --- 任務 03 ---
                 if uploaded_file_03:
-                    st.toast("正在處理 03.銷量報告...")
+                    st.toast("⏳ 正在處理 03.銷量報告...")
                     try:
                         t03 = pd.read_excel(uploaded_file_03, nrows=1, header=None).values.tolist()[0]
                         df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=1)
@@ -379,7 +396,7 @@ if app_mode == "📊 BS銷售更新":
 
                 # --- 任務 04 ---
                 if uploaded_file_04:
-                    st.toast("正在處理 04.利潤報告...")
+                    st.toast("⏳ 正在處理 04.利潤報告...")
                     try:
                         t04 = pd.read_excel(uploaded_file_04, nrows=1, header=None).values.tolist()[0]
                         df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
@@ -393,7 +410,7 @@ if app_mode == "📊 BS銷售更新":
                 else:
                     st.warning("⚠️ 未上傳 04.利潤報告，已跳過。")
 
-                # --- 任務 03 自動對應日期修復 ---
+                # --- 後處理二次同步 ---
                 if uploaded_file_03 and not has_error:
                     post_process_steps()
                     
