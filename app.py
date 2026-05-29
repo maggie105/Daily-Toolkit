@@ -27,7 +27,7 @@ st.markdown("""
         background-color: #f3f4f6 !important;
         border-right: 1px solid #e5e7eb;
     }
-    /* 標題與內文顏色統一 */
+    /* 標題與內文颜色統一 */
     h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
         color: #2b303a !important;
     }
@@ -88,6 +88,17 @@ st.markdown("""
         color: #ffffff !important;
         font-weight: 600 !important;
     }
+    
+    /* 自訂精緻的中等標題字體樣式 */
+    .custom-section-title {
+        color: #2b5c8f !important;
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        margin-bottom: 12px !important;
+        margin-top: 5px !important;
+        display: flex;
+        align-items: center;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -128,9 +139,6 @@ def get_worksheet_by_gid(sh, gid):
     return None
 
 def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header_row=0):
-    """
-    【防呆讀取函數】帶有特徵欄位檢查與異常捕捉
-    """
     try:
         df = pd.read_excel(uploaded_file, header=header_row)
     except Exception as e:
@@ -141,7 +149,6 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     norm_original_cols = [normalize_header(col) for col in original_cols]
     norm_to_orig = {normalize_header(col): col for col in original_cols}
     
-    # 檔案防呆：比對特徵欄位
     features = SHEET_CONFIGS[task_key]["features"]
     for f in features:
         if normalize_header(f) not in norm_original_cols:
@@ -158,23 +165,14 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     return df_aligned[target_headers]
 
 def get_gspread_client():
-    """
-    【終極相容憑證函數】完美支援 Streamlit Secrets 各種格式與本地 json 檔案
-    """
     scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    
-    # 1. 優先嘗試 Streamlit 線上 Secrets 環境
     if len(st.secrets) > 0:
         try:
-            # 狀況 A：如果使用者把 JSON 內容直接貼在 secrets 裡面（最常見）
             if "gcp_service_account" in st.secrets:
                 secret_data = st.secrets["gcp_service_account"]
-                # 如果是字串，嘗試解析成字典
                 creds_dict = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
                 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
                 return gspread.authorize(creds)
-            
-            # 狀況 B：如果使用者是直接把 toml 格式攤平貼在 secrets 裡
             elif "type" in st.secrets and st.secrets["type"] == "service_account":
                 creds_dict = dict(st.secrets)
                 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -182,7 +180,6 @@ def get_gspread_client():
         except Exception as e:
             st.error(f"❌ 嘗試解析雲端 Secrets 金鑰時發生錯誤: {e}")
             
-    # 2. 如果是本地運行，讀取本地的 service_account.json 檔案
     if os.path.exists(SERVICE_ACCOUNT_FILE):
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
@@ -197,14 +194,11 @@ def get_gspread_client():
 def upload_to_google_sheets(df, task_key, title_list=None):
     if df is None or df.empty:
         return
-        
     try:
         client = get_gspread_client()
         if not client: return
-            
         sh = client.open_by_key(SPREADSHEET_ID)
         worksheet = get_worksheet_by_gid(sh, SHEET_CONFIGS[task_key]["gid"])
-        
         if not worksheet:
             st.error(f"❌ 在雲端試算表中找不到 GID 為 `{SHEET_CONFIGS[task_key]['gid']}` 的子工作表。")
             return
@@ -232,24 +226,23 @@ def post_process_steps():
     try:
         client = get_gspread_client()
         if not client: return
-        
         sh = client.open_by_key(SPREADSHEET_ID)
         sheet_source = get_worksheet_by_gid(sh, SHEET_CONFIGS["03"]["gid"])
         sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
-        
         if not sheet_source or not sheet_target: 
             st.error("❌ 執行二次同步時找不到對應的工作表，已自動終止。")
             return
 
-        # 日期更新
         raw_date_text = sheet_source.acell('B1').value 
-        found_dates = re.findall(r'\d{4}-(\d{2})-(\d{2})', str(raw_date_text))
+        found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
         if len(found_dates) >= 2:
-            final_date_str = f"{found_dates[0][0]}{found_dates[0][1]}-{found_dates[1][0]}{found_dates[1][1]}"
+            # 轉換為 MMDD 格式
+            d1 = found_dates[0].replace("-", "")[4:]
+            d2 = found_dates[1].replace("-", "")[4:]
+            final_date_str = f"{d1}-{d2}"
             sheet_target.update(values=[[final_date_str]], range_name='B1')
             st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
 
-        # 條碼同步
         v_values = sheet_source.col_values(22)[4:] 
         filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
         sheet_target.batch_clear(["A3:A"]) 
@@ -270,12 +263,11 @@ with st.sidebar:
         ["📊 BS銷售更新", "➕ 其他自動化腳本"]
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V1.7 (線上相容完美版)")
+    st.caption("✨ 目前版本: V1.8 (版面微調優化版)")
 
 # ==================== 🖥️ 右側主畫面呈現 ====================
 if app_mode == "📊 BS銷售更新":
     st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新系統</h2>", unsafe_allow_html=True)
-    
     st.markdown("""
         <p style='color: #555; margin-bottom: 5px;'>
         對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。
@@ -290,24 +282,30 @@ if app_mode == "📊 BS銷售更新":
 
     with col1:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #2b5c8f; margin-top:0;'>📁 1. 庫存與促銷價報表區</h4>", unsafe_allow_html=True)
         
-        st.markdown("**01.庫存清單**")
+        # 📌 01. 庫存清單 (全新優化中等標題)
+        st.markdown('<div class="custom-section-title">📁 01. 庫存清單</div>', unsafe_allow_html=True)
         uploaded_files_01 = st.file_uploader("請上傳「库存清单*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="u01")
         
-        st.markdown("<br>**02.在線產品 更新促銷價**", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 📌 02. 在線產品 (全新優化中等標題)
+        st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
         uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
+        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx'] 檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #2b5c8f; margin-top:0;'>📁 2. 銷量與利潤報告區</h4>", unsafe_allow_html=True)
         
-        st.markdown("**03.銷量報告**")
+        # 📌 03. 銷量報告 (全新優化中等標題)
+        st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
         uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
         
-        st.markdown("<br>**04.利潤報告**", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 📌 04. 利潤報告 (全新優化中等標題)
+        st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
         uploaded_file_04 = st.file_uploader("請上傳「商品利润*.xlsx」檔案 (單選)", type=["xlsx"], key="u04")
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -395,7 +393,7 @@ if app_mode == "📊 BS銷售更新":
                 else:
                     st.warning("⚠️ 未上傳 04.利潤報告，已跳過。")
 
-                # --- 後處理二次同步 ---
+                # --- 任務 03 自動對應日期修復 ---
                 if uploaded_file_03 and not has_error:
                     post_process_steps()
                     
