@@ -285,7 +285,7 @@ with st.sidebar:
 
 # ==================== 🖥️ 右側主畫面：功能一 (BS銷售更新) ====================
 if app_mode == "📊 BS銷售更新":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新系統</h2>", unsafe_allow_html=True)
     st.markdown("""
         <p style='color: #555; margin-bottom: 5px;'>對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
         <p style='margin-top: 0;'>👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
@@ -378,8 +378,8 @@ if app_mode == "📊 BS銷售更新":
                 st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
 
 # ==================== 🖥️ 功能二：貨櫃箱號自動產出 ====================
-elif app_mode == "📦 貨櫃箱號":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動產出</h2>", unsafe_allow_html=True)
+elif app_mode == "📦 貨櫃箱號 自動產出":
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動倍增與明細產出系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -479,8 +479,8 @@ elif app_mode == "📦 貨櫃箱號":
                     st.error(f"❌ 處理過程中發生非預期錯誤: {e}")
 
 # ==================== 🖥️ 功能三：庫存資料 + 一維碼一鍵產出 ====================
-elif app_mode == "🏷️ 庫存資料+一維碼":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合</h2>", unsafe_allow_html=True)
+elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>對應原 VBA 巨集。請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
     st.markdown("---")
 
