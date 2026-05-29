@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 # ================= 網頁頁面初始設定 =================
 st.set_page_config(page_title="自動化工具", page_icon="🔧", layout="wide")
 
-# 🔥 終極北歐簡約風裝潢 (超強制 CSS 注入 + 程式碼複製按鈕懸浮置頂外掛)
+# 🔥 終極北歐簡約風裝潢 (超強制 CSS 注入)
 st.markdown("""
     <style>
     /* 全站北歐風淺色背景與冷灰色調文字 */
@@ -133,7 +133,7 @@ SHEET_CONFIGS = {
 }
 
 # ================= 標準表頭定義 =================
-HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加权成本价", "总成本价", "销售状态", "一级分类", "二级分类", "三級分類", "SKU類型", "備註"]
+HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加權成本價", "總成本價", "銷售狀態", "一級分類", "二級分類", "三級分類", "SKU類型", "備註"]
 HEADERS_02 = ["店铺昵称", "分类_L1", "分类_L2", "分类_L3", "产品名称", "Item ID", "销量", "收藏", "浏览量", "Parent SKU", "变种", "变种ID", "SKU", "库存", "价格", "促销价", "限购", "平台创建时间", "发货期"]
 HEADERS_03 = ["商品名称", "店铺", "商品SKU", "有效商品销售额", "有效订单量", "有效商品销量", "商品平均价格", "商品销售额", "商品销量", "订单总量", "包裹总量", "退款商品金额", "退款订单数", "退款商品数", "取消商品金額", "取消訂單數", "取消商品數"]
 HEADERS_04 = ["商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润", "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率", "商品总销售额", "折扣&优惠补贴", "买家支付运费", "卖家支付運費", "佣金", "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用"]
@@ -263,22 +263,33 @@ def post_process_steps():
     except Exception as e:
         st.error(f"❌ 後處理二次同步出錯: {e}")
 
-# ==================== 🛠️ 側邊欄控制面板 ====================
+# ==================== 🛠️ 側邊欄：雙階層架構規劃 ====================
 with st.sidebar:
     st.markdown("<h3 style='color: #2b5c8f; font-weight: 700;'>🔧 Daily Toolkit</h3>", unsafe_allow_html=True)
     st.write("數據處理中心")
     st.markdown("---")
     
-    app_mode = st.sidebar.radio(
-        "請選擇欲執行的工具：",
-        ["📊 BS銷售更新", "📦 貨櫃箱號 自動產出", "🏷️ 庫存資料+一維碼 一鍵產出"] # 👈 第三間功能房間完美開闢！
+    # 🌟 第一分類：大項目單選
+    main_category = st.radio(
+        "📂 請選擇主分類項目：",
+        ["📊 BS數據", "📦 貨櫃相關", "🧾 帳單核對"]
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V2.3 (三功能完全體)")
+    
+    # 🌟 第二分類：根據大項目自動決定子項目
+    if main_category == "📊 BS數據":
+        app_mode = st.radio("📄 請選擇子項目動作：", ["📊 BS銷售更新"])
+    elif main_category == "📦 貨櫃相關":
+        app_mode = st.radio("📄 請選擇子項目動作：", ["📦 貨櫃箱號 自動產出", "🏷️ 庫存資料+一維碼 一鍵產出"])
+    elif main_category == "🧾 帳單核對":
+        app_mode = st.radio("📄 請選擇子項目動作：", ["🧾 正隆帳單核對"]) # 👈 第四個子項目房間地基蓋好了！
+        
+    st.markdown("---")
+    st.caption("✨ 目前版本: V3.0 (側邊欄分類升級版)")
 
-# ==================== 🖥️ 功能一：BS銷售更新 ====================
+# ==================== 🖥️ 右側主畫面：功能一 (BS銷售更新) ====================
 if app_mode == "📊 BS銷售更新":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新系統</h2>", unsafe_allow_html=True)
     st.markdown("""
         <p style='color: #555; margin-bottom: 5px;'>對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
         <p style='margin-top: 0;'>👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
@@ -372,7 +383,7 @@ if app_mode == "📊 BS銷售更新":
 
 # ==================== 🖥️ 功能二：貨櫃箱號自動產出 ====================
 elif app_mode == "📦 貨櫃箱號 自動產出":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動產出</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動倍增與明細產出系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -473,7 +484,7 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
 
 # ==================== 🖥️ 功能三：庫存資料 + 一維碼一鍵產出 ====================
 elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>對應原 VBA 巨集。請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -500,19 +511,13 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
         else:
             with st.spinner("正在執行跨表 VLOOKUP 高速運算與取消合併儲存格填補中..."):
                 try:
-                    # 1. 讀取主表 (拆櫃明細)
-                    df_main = pd.read_excel(file_main, skiprows=3) # 第4行為表頭
-                    # 強制規範前 11 欄名稱
+                    df_main = pd.read_excel(file_main, skiprows=3)
                     new_headers = ["商品編號", "商品名稱", "商品規格", "品項條碼", "箱裝數", "叫貨數量", "件數", "福北總庫存", "15日銷售", "福撿儲位", "一維條碼"]
                     df_main.columns = new_headers[:len(df_main.columns)]
                     
-                    # 2. 讀取並預處理「貨架位檔案」 (解決 VBA 的 UnMerge 與向下填補問題)
                     df_shelf_raw = pd.read_excel(file_shelf)
-                    # 模擬 VBA 邏輯：第二欄為儲位，第五欄為條碼。
-                    # 在 pandas 中，取消合併後空白會讀成 NaN，直接用 ffill() 就能秒殺向下填充！
                     df_shelf_raw.iloc[:, 1] = df_shelf_raw.iloc[:, 1].ffill()
                     
-                    # 建立條碼到儲位的映射字典 (對應 VBA 將 E 欄剪切到 A 欄前)
                     shelf_dict = {}
                     for _, row in df_shelf_raw.iterrows():
                         barcode = str(row.iloc[4]).strip() if not pd.isna(row.iloc[4]) else ""
@@ -520,51 +525,41 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                         if barcode:
                             shelf_dict[barcode] = loc
 
-                    # 3. 讀取並預處理「採購建議檔案」
                     df_pur_raw = pd.read_excel(file_purchase)
-                    # 建立條碼到庫存(第6欄)與銷售(第13欄)的映射字典
                     pur_stock_dict = {}
                     pur_sale_dict = {}
                     for _, row in df_pur_raw.iterrows():
-                        barcode = str(row.iloc[0]).strip() if not pd.isna(row.iloc[0]) else "" # A欄條碼
-                        stock = row.iloc[5] if not pd.isna(row.iloc[5]) else 0                  # F欄庫存
-                        sale = row.iloc[12] if not pd.isna(row.iloc[12]) else 0                 # M欄銷售
+                        barcode = str(row.iloc[0]).strip() if not pd.isna(row.iloc[0]) else ""
+                        stock = row.iloc[5] if not pd.isna(row.iloc[5]) else 0
+                        sale = row.iloc[12] if not pd.isna(row.iloc[12]) else 0
                         if barcode:
                             pur_stock_dict[barcode] = stock
                             pur_sale_dict[barcode] = sale
 
-                    # 4. 核心數據填充與邏輯判斷 (對應 VBA For i = 5 To lastRow)
-                    yellow_rows = set() # 記錄哪些行需要刷黃底
+                    yellow_rows = set()
                     
                     for idx, row in df_main.iterrows():
                         search_key = str(row["品項條碼"]).strip() if not pd.isna(row["品項條碼"]) else ""
                         if not search_key or search_key == "nan":
                             continue
                         
-                        # 填入庫存與銷售 (VLOOKUP)
                         stock_val = pur_stock_dict.get(search_key, 0)
                         sale_val = pur_sale_dict.get(search_key, 0)
                         df_main.at[idx, "福北總庫存"] = stock_val
                         df_main.at[idx, "15日銷售"] = sale_val
                         
-                        # 填入福撿儲位 (VLOOKUP)
                         shelf_val = shelf_dict.get(search_key, "")
                         df_main.at[idx, "福撿儲位"] = shelf_val
-                        
-                        # 填入一維條碼公式 (VBA: ="*" & D & "*")
                         df_main.at[idx, "一維條碼"] = f'="*" & D{idx+5} & "*"'
                         
-                        # 條件判定 (對應 VBA 步驟 7, 8, 9 的篩選過濾與黃底判定)
-                        # 排除 W-兩倉暫存區、W-線東品 以及 空白
                         if shelf_val and shelf_val not in ["W-兩倉暫存區", "W-線東品"]:
                             try:
                                 diff = float(stock_val) - float(sale_val)
                                 if diff <= 0:
-                                    yellow_rows.add(idx + 5) # 轉換成 Excel 實際資料列號 (從第5行開始)
+                                    yellow_rows.add(idx + 5)
                             except:
                                 pass
 
-                    # 5. 使用 openpyxl 進行高質量視覺裝潢
                     wb = Workbook()
                     ws = wb.active
                     ws.title = "庫存一維碼明細"
@@ -574,13 +569,11 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                     center_align = Alignment(horizontal='center', vertical='center')
                     ms_font = Font(name='微軟正黑體', size=11)
                     barcode_font = Font(name='Free 3 of 9 Extended', size=30)
-                    yellow_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid") # 溫潤優雅的淺黃
+                    yellow_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
 
-                    # 寫入前四行空白/標題保護 (維持與原始拆櫃明細相同結構)
                     for _ in range(3):
                         ws.append([])
                     
-                    # 寫入第4行表頭
                     ws.append(new_headers)
                     for col_idx in range(1, 12):
                         cell = ws.cell(row=4, column=col_idx)
@@ -588,14 +581,11 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                         cell.alignment = center_align
                         cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
-                    # 寫入資料列
                     for _, row_data in df_main.fillna("").iterrows():
                         ws.append(list(row_data))
 
-                    # 建立篩選器
                     ws.auto_filter.ref = f"A4:K{ws.max_row}"
 
-                    # 格式美化與黃底填充
                     for r_idx in range(5, ws.max_row + 1):
                         is_yellow = r_idx in yellow_rows
                         for c_idx in range(1, 12):
@@ -603,23 +593,18 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                             cell.border = full_border
                             cell.alignment = center_align
                             cell.font = ms_font
-                            
-                            # 如果是K欄 (一維條碼)，套用特殊的條碼字型與置中
                             if c_idx == 11:
                                 cell.font = barcode_font
-                            
-                            # 刷上黃底標記
                             if is_yellow:
                                 cell.fill = yellow_fill
 
-                    # 自動調整欄寬 (精準中文 Big5 長度演算)
                     for col in ws.columns:
                         max_length = 0
                         column = col[0].column_letter
                         for cell in col:
                             if cell.value:
                                 val_str = str(cell.value)
-                                if val_str.startswith('="*'): # 跳過公式字串長度干擾
+                                if val_str.startswith('="*'):
                                     byte_len = 15
                                 else:
                                     try: byte_len = len(val_str.encode('big5'))
@@ -627,7 +612,6 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                                 if byte_len > max_length: max_length = byte_len
                         ws.column_dimensions[column].width = max_length + 4
 
-                    # 6. 導出前端下載
                     excel_data = BytesIO()
                     wb.save(excel_data)
                     excel_data.seek(0)
@@ -642,3 +626,17 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                     )
                 except Exception as e:
                     st.error(f"❌ 跨表運算時發生非預期錯誤: {e}")
+
+# ==================== 🖥️ 功能四：正隆帳單核對 (地基搭建) ====================
+elif app_mode == "🧾 正隆帳單核對":
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單 PDF 自動化核對系統</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #555;'>我們準備開始依序邊寫、邊測試這個核心 PDF 提取腳本。請先上傳您的原始 PDF 帳單檔進行地基測試。</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+    st.markdown('<div class="custom-section-title">📄 請上傳正隆帳單 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
+    pdf_file = st.file_uploader("將 PDF 檔案拖放到此處", type=["pdf"], key="updf_billing")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if pdf_file is not None:
+        st.info("🎯 偵測到 PDF 檔案！我們隨時可以開始進行步驟二的『提取核心邏輯開發』。")
