@@ -83,7 +83,6 @@ st.markdown("""
     .stButton > button:hover {
         background-color: #334155 !important;
         border-color: #334155 !important;
-        color: #ffffff !important;
     }
     .stButton > button p {
         color: #ffffff !important;
@@ -117,6 +116,18 @@ st.markdown("""
     div[data-testid="stToast"] button {
         color: #94a3b8 !important;
     }
+    
+    /* 側邊欄下拉選單精緻化外觀微調 */
+    div[data-testid="stSelectbox"] label p {
+        font-weight: 600 !important;
+        color: #475569 !important;
+        font-size: 14px !important;
+    }
+    div[data-testid="stSelectbox"] > div > div {
+        background-color: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
+        border-radius: 8px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -136,7 +147,7 @@ SHEET_CONFIGS = {
 HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加權成本價", "總成本價", "銷售狀態", "一級分類", "二級分類", "三級分類", "SKU類型", "備註"]
 HEADERS_02 = ["店铺昵称", "分类_L1", "分类_L2", "分类_L3", "产品名称", "Item ID", "销量", "收藏", "浏览量", "Parent SKU", "变种", "变种ID", "SKU", "库存", "价格", "促销价", "限购", "平台创建时间", "发货期"]
 HEADERS_03 = ["商品名称", "店铺", "商品SKU", "有效商品销售额", "有效订单量", "有效商品销量", "商品平均价格", "商品销售额", "商品销量", "订单总量", "包裹总量", "退款商品金额", "退款订单数", "退款商品数", "取消商品金額", "取消訂單數", "取消商品數"]
-HEADERS_04 = ["商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润", "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率", "商品总销售额", "折扣&优惠补贴", "买家支付运费", "卖家支付運費", "佣金", "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用"]
+HEADERS_04 = ["商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润", "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率", "商品总销售额", "折扣&优惠补贴", "买家支付运費", "卖家支付運費", "佣金", "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用"]
 
 # ================= 工具函數 =================
 def normalize_header(header_name):
@@ -263,29 +274,30 @@ def post_process_steps():
     except Exception as e:
         st.error(f"❌ 後處理二次同步出錯: {e}")
 
-# ==================== 🛠️ 側邊欄：雙階層架構規劃 ====================
+# ==================== 🛠️ 側邊欄：徹底消滅黑洞圓點 ====================
 with st.sidebar:
     st.markdown("<h3 style='color: #2b5c8f; font-weight: 700;'>🔧 Daily Toolkit</h3>", unsafe_allow_html=True)
     st.write("數據處理中心")
     st.markdown("---")
     
-    # 🌟 第一分類：大項目單選
-    main_category = st.radio(
-        "📂 請選擇主分類項目：",
+    # 🌟 用高級下拉式選單取代單選鈕
+    main_category = st.selectbox(
+        "📁 請選擇主分類項目：",
         ["📊 BS數據", "📦 貨櫃相關", "🧾 帳單核對"]
     )
-    st.markdown("---")
     
-    # 🌟 第二分類：根據大項目自動決定子項目
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 🌟 子項目同樣採用下拉選單，乾淨流暢
     if main_category == "📊 BS數據":
-        app_mode = st.radio("📄 請選擇子項目動作：", ["📊 BS銷售更新"])
+        app_mode = st.selectbox("📄 請選擇子項目動作：", ["📊 BS銷售更新"])
     elif main_category == "📦 貨櫃相關":
-        app_mode = st.radio("📄 請選擇子項目動作：", ["📦 貨櫃箱號 自動產出", "🏷️ 庫存資料+一維碼 一鍵產出"])
+        app_mode = st.selectbox("📄 請選擇子項目動作：", ["📦 貨櫃箱號 自動產出", "🏷️ 庫存資料+一維碼 一鍵產出"])
     elif main_category == "🧾 帳單核對":
-        app_mode = st.radio("📄 請選擇子項目動作：", ["🧾 正隆帳單核對"]) # 👈 第四個子項目房間地基蓋好了！
+        app_mode = st.selectbox("📄 請選擇子項目動作：", ["🧾 正隆帳單核對"])
         
     st.markdown("---")
-    st.caption("✨ 目前版本: V3.0 (側邊欄分類升級版)")
+    st.caption("✨ 目前版本: V3.1 (無黑洞極簡Dropdown版)")
 
 # ==================== 🖥️ 右側主畫面：功能一 (BS銷售更新) ====================
 if app_mode == "📊 BS銷售更新":
@@ -627,7 +639,7 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
                 except Exception as e:
                     st.error(f"❌ 跨表運算時發生非預期錯誤: {e}")
 
-# ==================== 🖥️ 功能四：正隆帳單核對 (地基搭建) ====================
+# ==================== 🖥️ 功能四：正隆帳單核對 ====================
 elif app_mode == "🧾 正隆帳單核對":
     st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單 PDF 自動化核對系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>我們準備開始依序邊寫、邊測試這個核心 PDF 提取腳本。請先上傳您的原始 PDF 帳單檔進行地基測試。</p>", unsafe_allow_html=True)
