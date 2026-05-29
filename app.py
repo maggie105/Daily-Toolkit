@@ -379,7 +379,7 @@ if app_mode == "📊 BS銷售更新":
 
 # ==================== 🖥️ 功能二：貨櫃箱號自動產出 ====================
 elif app_mode == "📦 貨櫃箱號":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動明細產出</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動產出</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -480,7 +480,7 @@ elif app_mode == "📦 貨櫃箱號":
 
 # ==================== 🖥️ 功能三：庫存資料 + 一維碼一鍵產出 ====================
 elif app_mode == "🏷️ 庫存資料+一維碼":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼 一鍵產出</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>對應原 VBA 巨集。請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -625,7 +625,7 @@ elif app_mode == "🏷️ 庫存資料+一維碼":
 
 # ==================== 🖥️ 功能四：正隆帳單核對 ====================
 elif app_mode == "🧾 正隆帳單核對":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單自動化核對</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單 PDF 自動化核對系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>我們準備開始依序邊寫、邊測試這個核心 PDF 提取腳本。請先上傳您的原始 PDF 帳單檔進行地基測試。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
