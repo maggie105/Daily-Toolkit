@@ -104,7 +104,7 @@ SHEET_CONFIGS = {
 }
 
 # ================= 標準表頭定義 =================
-HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加权成本价", "总成本价", "销售状态", "一级分类", "二级分类", "三级分类", "SKU类型", "备注"]
+HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加权成本价", "总成本价", "销售状态", "一级分类", "二级分类", "三級分類", "SKU類型", "備註"]
 HEADERS_02 = ["店铺昵称", "分类_L1", "分类_L2", "分类_L3", "产品名称", "Item ID", "销量", "收藏", "浏览量", "Parent SKU", "变种", "变种ID", "SKU", "库存", "价格", "促销价", "限购", "平台创建时间", "发货期"]
 HEADERS_03 = ["商品名称", "店铺", "商品SKU", "有效商品销售额", "有效订单量", "有效商品销量", "商品平均价格", "商品销售额", "商品销量", "订单总量", "包裹总量", "退款商品金额", "退款订单数", "退款商品数", "取消商品金額", "取消訂單數", "取消商品數"]
 HEADERS_04 = ["商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润", "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率", "商品总销售额", "折扣&优惠补贴", "买家支付运费", "卖家支付運費", "佣金", "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用"]
@@ -158,17 +158,31 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     return df_aligned[target_headers]
 
 def get_gspread_client():
+    """
+    【終極相容憑證函數】完美支援 Streamlit Secrets 各種格式與本地 json 檔案
+    """
     scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     
-    if "gcp_service_account" in st.secrets:
+    # 1. 優先嘗試 Streamlit 線上 Secrets 環境
+    if len(st.secrets) > 0:
         try:
-            creds_dict = json.loads(st.secrets["gcp_service_account"])
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            return gspread.authorize(creds)
-        except Exception as e:
-            st.error(f"❌ 讀取雲端環境變數 Secrets 失敗。錯誤: {e}")
-            return None
+            # 狀況 A：如果使用者把 JSON 內容直接貼在 secrets 裡面（最常見）
+            if "gcp_service_account" in st.secrets:
+                secret_data = st.secrets["gcp_service_account"]
+                # 如果是字串，嘗試解析成字典
+                creds_dict = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+                return gspread.authorize(creds)
             
+            # 狀況 B：如果使用者是直接把 toml 格式攤平貼在 secrets 裡
+            elif "type" in st.secrets and st.secrets["type"] == "service_account":
+                creds_dict = dict(st.secrets)
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+                return gspread.authorize(creds)
+        except Exception as e:
+            st.error(f"❌ 嘗試解析雲端 Secrets 金鑰時發生錯誤: {e}")
+            
+    # 2. 如果是本地運行，讀取本地的 service_account.json 檔案
     if os.path.exists(SERVICE_ACCOUNT_FILE):
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
@@ -176,9 +190,9 @@ def get_gspread_client():
         except Exception as e:
             st.error(f"❌ 讀取本地憑證 `{SERVICE_ACCOUNT_FILE}` 失敗。錯誤: {e}")
             return None
-    else:
-        st.error(f"❌ 找不到憑證設定！本地請補上 `{SERVICE_ACCOUNT_FILE}` 檔案；若在線上請在 Secrets 設定 `gcp_service_account`。")
-        return None
+            
+    st.error("❌ 找不到憑證設定！請確認 Streamlit 後台的 Advanced settings -> Secrets 已正確貼入 Google 金鑰。")
+    return None
 
 def upload_to_google_sheets(df, task_key, title_list=None):
     if df is None or df.empty:
@@ -247,7 +261,7 @@ def post_process_steps():
 
 # ==================== 🛠️ 側邊欄控制面板 ====================
 with st.sidebar:
-    st.markdown("<h3 style='color: #2b5c8f; font-weight: 700;'>🔧 自動化工具</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #2b5c8f; font-weight: 700;'>🔧 Daily Toolkit</h3>", unsafe_allow_html=True)
     st.write("數據處理中心")
     st.markdown("---")
     
@@ -256,7 +270,7 @@ with st.sidebar:
         ["📊 BS銷售更新", "➕ 其他自動化腳本"]
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V1.6 (線上防呆安全版)")
+    st.caption("✨ 目前版本: V1.7 (線上相容完美版)")
 
 # ==================== 🖥️ 右側主畫面呈現 ====================
 if app_mode == "📊 BS銷售更新":
