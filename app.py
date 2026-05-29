@@ -6,6 +6,8 @@ import gspread
 import warnings
 import re
 import json
+import glob
+from io import BytesIO
 from oauth2client.service_account import ServiceAccountCredentials
 
 # 1. 隱藏 openpyxl 的格式警告
@@ -54,7 +56,7 @@ st.markdown("""
         background-color: #fafafa !important;
     }
     
-    /* 修正微調：強制將所有 Upload 小按鈕改為「常態北歐灰底黑字」 */
+    /* 強制將所有 Upload 小按鈕改為「常態北歐灰底黑字」 */
     button[data-testid*="stBaseButton"] {
         background-color: #e2e8f0 !important;
         color: #475569 !important;
@@ -66,7 +68,7 @@ st.markdown("""
         color: #334155 !important;
     }
     
-    /* 修正內文字體：透過最高權限強制將大按鈕改為深藍底、白字、粗體 */
+    /* 強制將大按鈕改為深藍底、白字、粗體 */
     .stButton > button {
         background-color: #475569 !important;
         border-color: #475569 !important;
@@ -77,13 +79,11 @@ st.markdown("""
         padding: 12px 0 !important;
         transition: all 0.2s ease !important;
     }
-    /* 確保滑鼠移過去依然是白字 */
     .stButton > button:hover {
         background-color: #334155 !important;
         border-color: #334155 !important;
         color: #ffffff !important;
     }
-    /* 雙重保險防快取：針對深色按鈕內的文字標籤強制改為白色 */
     .stButton > button p {
         color: #ffffff !important;
         font-weight: 600 !important;
@@ -100,21 +100,19 @@ st.markdown("""
         align-items: center;
     }
 
-    /* 🎨 【右上角 Toast 視窗優化】改為高對比度的深冷莫蘭迪灰背景，配極致白字 */
+    /* 右上角 Toast 視窗優化 (深冷莫蘭迪灰背景，配極致白字) */
     div[data-testid="stToast"] {
-        background-color: #334155 !important; /* 深冷藍灰，對比度極高 */
-        border: 1px solid #1e293b !important;  /* 深色收邊框 */
+        background-color: #334155 !important; 
+        border: 1px solid #1e293b !important;  
         border-radius: 8px !important;         
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; /* 顯眼陰影 */
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; 
     }
-    /* 強制修改文字為粗體純白，確保在深色背景上絕對清晰 */
     div[data-testid="stToast"] .stMarkdown p {
-        color: #ffffff !important;            /* 純白字 */
-        font-weight: 600 !important;          /* 粗體加固 */
+        color: #ffffff !important;            
+        font-weight: 600 !important;          
         font-size: 14px !important;
         letter-spacing: 0.5px !important;
     }
-    /* 修改右側關閉小叉叉的顏色為淡灰 */
     div[data-testid="stToast"] button {
         color: #94a3b8 !important;
     }
@@ -161,7 +159,7 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     try:
         df = pd.read_excel(uploaded_file, header=header_row)
     except Exception as e:
-        st.error(f"❌ 無法讀取檔案 `{uploaded_file.name}`，請確認是否為標準且未損毀的 Excel 檔案。錯誤資訊: {e}")
+        st.error(f"❌ 無法讀取檔案 `{uploaded_file.name}`。錯誤資訊: {e}")
         return None
         
     original_cols = df.columns.tolist()
@@ -171,7 +169,7 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     features = SHEET_CONFIGS[task_key]["features"]
     for f in features:
         if normalize_header(f) not in norm_original_cols:
-            st.error(f"🚨 檔案防呆攔截：您上傳的 `{uploaded_file.name}` 看起來不像是正確的表格（找不到關鍵欄位 `{f}`），請確認是否放錯區塊！")
+            st.error(f"🚨 檔案防呆攔截：您上傳的 `{uploaded_file.name}` 找不到關鍵欄位 `{f}`！")
             return None
             
     df_aligned = pd.DataFrame()
@@ -206,8 +204,6 @@ def get_gspread_client():
         except Exception as e:
             st.error(f"❌ 讀取本地憑證 `{SERVICE_ACCOUNT_FILE}` 失敗。錯誤: {e}")
             return None
-            
-    st.error("❌ 找不到憑證設定！請確認 Streamlit 後台的 Advanced settings -> Secrets 已正確貼入 Google 金鑰。")
     return None
 
 def upload_to_google_sheets(df, task_key, title_list=None):
@@ -218,9 +214,7 @@ def upload_to_google_sheets(df, task_key, title_list=None):
         if not client: return
         sh = client.open_by_key(SPREADSHEET_ID)
         worksheet = get_worksheet_by_gid(sh, SHEET_CONFIGS[task_key]["gid"])
-        if not worksheet:
-            st.error(f"❌ 在雲端試算表中找不到 GID 為 `{SHEET_CONFIGS[task_key]['gid']}` 的子工作表。")
-            return
+        if not worksheet: return
             
         end_col = SHEET_CONFIGS[task_key]["end_col"]
         worksheet.batch_clear([f"A:{end_col}"])
@@ -248,9 +242,7 @@ def post_process_steps():
         sh = client.open_by_key(SPREADSHEET_ID)
         sheet_source = get_worksheet_by_gid(sh, SHEET_CONFIGS["03"]["gid"])
         sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
-        if not sheet_source or not sheet_target: 
-            st.error("❌ 執行二次同步時找不到對應的工作表，已自動終止。")
-            return
+        if not sheet_source or not sheet_target: return
 
         raw_date_text = sheet_source.acell('B1').value 
         found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
@@ -278,67 +270,49 @@ with st.sidebar:
     
     app_mode = st.radio(
         "請選擇欲執行的工具：",
-        ["📊 BS銷售更新", "➕ 其他自動化腳本"]
+        ["📊 BS銷售更新", "📦 貨櫃箱號 自動產出"] # 👈 這裡成功開闢了新功能房間！
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V2.1 (完美平衡客製版)")
+    st.caption("✨ 目前版本: V2.2 (雙功能雲端整合版)")
 
-# ==================== 🖥️ 右側主畫面呈現 ====================
+# ==================== 🖥️ 右側主畫面：功能一 ====================
 if app_mode == "📊 BS銷售更新":
     st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新系統</h2>", unsafe_allow_html=True)
     st.markdown("""
-        <p style='color: #555; margin-bottom: 5px;'>
-        對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。
-        </p>
-        <p style='margin-top: 0;'>
-        👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a>
-        </p>
+        <p style='color: #555; margin-bottom: 5px;'>對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
+        <p style='margin-top: 0;'>👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
     """, unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2 = st.columns(2)
-
     with col1:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-        
-        # 📌 01. 庫存清單
         st.markdown('<div class="custom-section-title">📁 01. 庫存清單</div>', unsafe_allow_html=True)
         uploaded_files_01 = st.file_uploader("請上傳「库存清单*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="u01")
-        
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 📌 02. 在線產品
         st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
         uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx'] 檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
+        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-        
-        # 📌 03. 銷量報告
         st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
         uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
-        
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 📌 04. 利潤報告
         st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
         uploaded_file_04 = st.file_uploader("請上傳「商品利润*.xlsx」檔案 (單選)", type=["xlsx"], key="u04")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 執行按鈕
     if st.button("🔥 啟動自動化整合全流程", type="primary", use_container_width=True):
         if not (uploaded_files_01 or uploaded_files_lan or uploaded_files_onl or uploaded_file_03 or uploaded_file_04):
-            st.error("🚨 流程終止：您尚未上傳任何 Excel 檔案，請先拖放檔案至上方區塊再執行。")
+            st.error("🚨 流程終止：您尚未上傳任何 Excel 檔案。")
         else:
             start_time = time.time()
             has_error = False
-            
-            with st.spinner("系統正在全速運算、清洗與同步數據，請稍候..."):
-                # --- 任務 01 ---
+            with st.spinner("系統正在全速同步數據，請稍候..."):
                 if uploaded_files_01:
                     st.toast("⏳ 正在處理 01.庫存清單...")
                     list_dfs = []
@@ -346,81 +320,171 @@ if app_mode == "📊 BS銷售更新":
                         res_df = safe_read_and_align_uploaded(f, HEADERS_01, "01")
                         if res_df is not None: list_dfs.append(res_df)
                         else: has_error = True
-                    
                     if list_dfs:
                         df01 = pd.concat(list_dfs, ignore_index=True)
                         upload_to_google_sheets(df01, "01")
-                else:
-                    st.warning("⚠️ 未上傳 01.庫存清單，已跳過。")
 
-                # --- 任務 02 ---
                 if uploaded_files_lan or uploaded_files_onl:
                     st.toast("⏳ 正在處理 02.在線產品更新...")
                     lan_dfs, onl_dfs = [], []
-                    
                     for f in uploaded_files_lan:
                         res_df = safe_read_and_align_uploaded(f, HEADERS_02, "02")
                         if res_df is not None: lan_dfs.append(res_df)
                         else: has_error = True
-                        
                     for f in uploaded_files_onl:
                         res_df = safe_read_and_align_uploaded(f, HEADERS_02, "02")
                         if res_df is not None: onl_dfs.append(res_df)
                         else: has_error = True
-                    
                     df_lan = pd.concat(lan_dfs, ignore_index=True).drop_duplicates(subset=['SKU']) if lan_dfs else pd.DataFrame(columns=HEADERS_02)
                     df_onl = pd.concat(onl_dfs, ignore_index=True).drop_duplicates(subset=['SKU']) if onl_dfs else pd.DataFrame(columns=HEADERS_02)
-                    
                     df02 = pd.concat([df_lan, df_onl], ignore_index=True)
                     if not df02.empty:
                         df02['priority'] = df02['店铺昵称'].apply(lambda x: 0 if x == "02-懶餅乾家居" else 1)
                         df02 = df02.sort_values(by=['SKU', 'priority']).drop_duplicates(subset=['SKU'], keep='first').drop(columns=['priority'])
                         upload_to_google_sheets(df02, "02")
-                else:
-                    st.warning("⚠️ 未上傳 02.在線產品，已跳過。")
 
-                # --- 任務 03 ---
                 if uploaded_file_03:
                     st.toast("⏳ 正在處理 03.銷量報告...")
                     try:
                         t03 = pd.read_excel(uploaded_file_03, nrows=1, header=None).values.tolist()[0]
                         df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=1)
-                        if df03 is not None:
-                            upload_to_google_sheets(df03, "03", title_list=t03)
-                        else:
-                            has_error = True
-                    except Exception as e:
-                        st.error(f"❌ 03 銷量報告標題列解析失敗: {e}")
-                        has_error = True
-                else:
-                    st.warning("⚠️ 未上傳 03.銷量報告，已跳過。")
+                        if df03 is not None: upload_to_google_sheets(df03, "03", title_list=t03)
+                        else: has_error = True
+                    except Exception as e: has_error = True
 
-                # --- 任務 04 ---
                 if uploaded_file_04:
                     st.toast("⏳ 正在處理 04.利潤報告...")
                     try:
                         t04 = pd.read_excel(uploaded_file_04, nrows=1, header=None).values.tolist()[0]
                         df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
-                        if df04 is not None:
-                            upload_to_google_sheets(df04, "04", title_list=t04)
-                        else:
-                            has_error = True
-                    except Exception as e:
-                        st.error(f"❌ 04 利潤報告標題列解析失敗: {e}")
-                        has_error = True
-                else:
-                    st.warning("⚠️ 未上傳 04.利潤報告，已跳過。")
+                        if df04 is not None: upload_to_google_sheets(df04, "04", title_list=t04)
+                        else: has_error = True
+                    except Exception as e: has_error = True
 
-                # --- 後處理二次同步 ---
                 if uploaded_file_03 and not has_error:
                     post_process_steps()
                     
             if has_error:
-                st.warning("⚠️ 流程已結束，但過程中發生過上述錯誤攔截，部分雲端資料可能未更新完成，請檢查修正後重新上傳。")
+                st.warning("⚠️ 流程已結束，但過程中發生過上述錯誤攔截，請檢查修正。")
             else:
-                # 🟢 完全維持你原本最喜歡的綠底狀態，不做任何修改
                 st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
 
-elif app_mode == "➕ 其他自動化腳本":
-    st.subheader("⚙️ 更多自訂腳本功能")
-    st.info("未來有任何新開發好的 Python 文件處理小工具，都可以一併整合到左側選單中。")
+# ==================== 🖥️ 右側主畫面：功能二 ====================
+elif app_mode == "📦 貨櫃箱號 自動產出":
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動倍增與明細產出系統</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+    st.markdown('<div class="custom-section-title">📁 請上傳拆櫃明細原始檔案 (.xlsx)</div>', unsafe_allow_html=True)
+    ctn_file = st.file_uploader("將檔案拖放到此處", type=["xlsx"], key="uctn")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if ctn_file is not None:
+        if st.button("🚀 啟動貨櫃數據倍增與樣式優化", type="primary", use_container_width=True):
+            with st.spinner("正在執行核心演算與 Openpyxl 視覺裝潢中..."):
+                try:
+                    # 1. 讀取與處理邏輯
+                    df = pd.read_excel(ctn_file, skiprows=4, header=None)
+                    header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
+                    actual_col_count = len(df.columns)
+                    df.columns = header_names[:actual_col_count]
+                    for col in header_names[actual_col_count:]:
+                        df[col] = None
+
+                    # 過濾雜項
+                    df = df[df['col_A'].notna()]
+                    exclude_keywords = '合计|总计|CTN|SKU|品项|合計|總計|品項'
+                    df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
+
+                    # 處理 G 欄空白標記
+                    df['is_empty_g'] = df['col_G'].isna()
+                    df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
+                    
+                    # 依照 temp_g 倍增列
+                    df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
+
+                    # 產出序號
+                    def generate_h(row, group_count):
+                        if row['is_empty_g']: return "" 
+                        return f"{int(row['col_G'])}箱-{group_count + 1}"
+
+                    df_expanded['col_H'] = [
+                        generate_h(row, count) 
+                        for row, count in zip(df_expanded.to_dict('records'), df_expanded.groupby(level=0).cumcount())
+                    ]
+
+                    is_empty_list = df_expanded['is_empty_g'].tolist()
+                    output_df = df_expanded.iloc[:, :9].copy()
+                    final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
+                    output_df.columns = final_headers
+
+                    # 2. 直接在記憶體中進行 Openpyxl 樣式優化 (不落地產生實體檔案)
+                    from openpyxl import Workbook
+                    from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
+                    
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "拆櫃明細"
+
+                    thin_side = Side(border_style="thin", color="000000")
+                    full_border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    center_align = Alignment(horizontal='center', vertical='center')
+                    ms_font = Font(name='微軟正黑體', size=11)
+                    red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+
+                    # 寫入表頭
+                    ws.append(final_headers)
+                    for col_idx in range(1, 10):
+                        cell = ws.cell(row=1, column=col_idx)
+                        cell.border = full_border
+                        cell.alignment = center_align
+                        cell.font = Font(name='微軟正黑體', size=11, bold=True)
+
+                    # 寫入資料列並上色
+                    for row_data in output_df.fillna("").values.tolist():
+                        ws.append(row_data)
+
+                    # 加入篩選器
+                    ws.auto_filter.ref = f"A1:I{ws.max_row}"
+
+                    # 格式化與紅底填充
+                    for row_idx, is_empty in enumerate(is_empty_list, start=2):
+                        for col_idx in range(1, 10):
+                            cell = ws.cell(row=row_idx, column=col_idx)
+                            cell.border = full_border
+                            cell.alignment = center_align
+                            cell.font = ms_font
+                            if is_empty:
+                                cell.fill = red_fill
+
+                    # 自動調整欄寬 (精準相容中文 Big5 位元組長度)
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            if cell.value:
+                                val_str = str(cell.value)
+                                try:
+                                    byte_len = len(val_str.encode('big5'))
+                                except:
+                                    byte_len = len(val_str)
+                                if byte_len > max_length:
+                                    max_length = byte_len
+                        ws.column_dimensions[column].width = max_length + 4
+
+                    # 3. 轉化為前端一鍵下載按鈕
+                    excel_data = BytesIO()
+                    wb.save(excel_data)
+                    excel_data.seek(0)
+
+                    st.success("✨ 貨櫃箱號演算與紅底優化完畢！請點擊下方按鈕下載成果：")
+                    st.download_button(
+                        label="📥 點此一鍵下載全新拆櫃 Excel 檔案",
+                        data=excel_data,
+                        file_name="#義烏櫃 拆櫃明細-福北路-箱數.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"❌ 處理過程中發生非預期錯誤: {e}")
