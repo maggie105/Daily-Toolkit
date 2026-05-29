@@ -15,7 +15,7 @@ from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 # ================= 網頁頁面初始設定 =================
-st.set_page_config(page_title="自動化工具🔧", page_icon="🔧", layout="wide")
+st.set_page_config(page_title="自動化工具", page_icon="🔧", layout="wide")
 
 # 🔥 終極北歐簡約風裝潢 (超強制 CSS 注入 + 程式碼複製按鈕懸浮置頂外掛)
 st.markdown("""
