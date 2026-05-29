@@ -6,9 +6,10 @@ import gspread
 import warnings
 import re
 import json
-import glob
 from io import BytesIO
 from oauth2client.service_account import ServiceAccountCredentials
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
 
 # 1. 隱藏 openpyxl 的格式警告
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -16,7 +17,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 # ================= 網頁頁面初始設定 =================
 st.set_page_config(page_title="自動化工具🔧", page_icon="🔧", layout="wide")
 
-# 🔥 終極北歐簡約風裝潢 (超強制 CSS 注入)
+# 🔥 終極北歐簡約風裝潢 (超強制 CSS 注入 + 程式碼複製按鈕懸浮置頂外掛)
 st.markdown("""
     <style>
     /* 全站北歐風淺色背景與冷灰色調文字 */
@@ -100,7 +101,7 @@ st.markdown("""
         align-items: center;
     }
 
-    /* 右上角 Toast 視窗優化 (深冷莫蘭迪灰背景，配極致白字) */
+    /* 右上角 Toast 視窗優化 */
     div[data-testid="stToast"] {
         background-color: #334155 !important; 
         border: 1px solid #1e293b !important;  
@@ -268,14 +269,14 @@ with st.sidebar:
     st.write("數據處理中心")
     st.markdown("---")
     
-    app_mode = st.radio(
+    app_mode = st.sidebar.radio(
         "請選擇欲執行的工具：",
-        ["📊 BS銷售更新", "📦 貨櫃箱號 自動產出"] # 👈 這裡成功開闢了新功能房間！
+        ["📊 BS銷售更新", "📦 貨櫃箱號 自動產出", "🏷️ 庫存資料+一維碼 一鍵產出"] # 👈 第三間功能房間完美開闢！
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V2.2 (雙功能雲端整合版)")
+    st.caption("✨ 目前版本: V2.3 (三功能完全體)")
 
-# ==================== 🖥️ 右側主畫面：功能一 ====================
+# ==================== 🖥️ 功能一：BS銷售更新 ====================
 if app_mode == "📊 BS銷售更新":
     st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📊 BigSeller 銷售數據更新系統</h2>", unsafe_allow_html=True)
     st.markdown("""
@@ -369,7 +370,7 @@ if app_mode == "📊 BS銷售更新":
             else:
                 st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
 
-# ==================== 🖥️ 右側主畫面：功能二 ====================
+# ==================== 🖥️ 功能二：貨櫃箱號自動產出 ====================
 elif app_mode == "📦 貨櫃箱號 自動產出":
     st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動倍增與明細產出系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
@@ -384,7 +385,6 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
         if st.button("🚀 啟動貨櫃數據倍增與樣式優化", type="primary", use_container_width=True):
             with st.spinner("正在執行核心演算與 Openpyxl 視覺裝潢中..."):
                 try:
-                    # 1. 讀取與處理邏輯
                     df = pd.read_excel(ctn_file, skiprows=4, header=None)
                     header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
                     actual_col_count = len(df.columns)
@@ -392,19 +392,14 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                     for col in header_names[actual_col_count:]:
                         df[col] = None
 
-                    # 過濾雜項
                     df = df[df['col_A'].notna()]
                     exclude_keywords = '合计|总计|CTN|SKU|品项|合計|總計|品項'
                     df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
 
-                    # 處理 G 欄空白標記
                     df['is_empty_g'] = df['col_G'].isna()
                     df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
-                    
-                    # 依照 temp_g 倍增列
                     df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
 
-                    # 產出序號
                     def generate_h(row, group_count):
                         if row['is_empty_g']: return "" 
                         return f"{int(row['col_G'])}箱-{group_count + 1}"
@@ -419,10 +414,6 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                     final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
                     output_df.columns = final_headers
 
-                    # 2. 直接在記憶體中進行 Openpyxl 樣式優化 (不落地產生實體檔案)
-                    from openpyxl import Workbook
-                    from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
-                    
                     wb = Workbook()
                     ws = wb.active
                     ws.title = "拆櫃明細"
@@ -433,7 +424,6 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                     ms_font = Font(name='微軟正黑體', size=11)
                     red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
-                    # 寫入表頭
                     ws.append(final_headers)
                     for col_idx in range(1, 10):
                         cell = ws.cell(row=1, column=col_idx)
@@ -441,14 +431,11 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                         cell.alignment = center_align
                         cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
-                    # 寫入資料列並上色
                     for row_data in output_df.fillna("").values.tolist():
                         ws.append(row_data)
 
-                    # 加入篩選器
                     ws.auto_filter.ref = f"A1:I{ws.max_row}"
 
-                    # 格式化與紅底填充
                     for row_idx, is_empty in enumerate(is_empty_list, start=2):
                         for col_idx in range(1, 10):
                             cell = ws.cell(row=row_idx, column=col_idx)
@@ -458,22 +445,17 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                             if is_empty:
                                 cell.fill = red_fill
 
-                    # 自動調整欄寬 (精準相容中文 Big5 位元組長度)
                     for col in ws.columns:
                         max_length = 0
                         column = col[0].column_letter
                         for cell in col:
                             if cell.value:
                                 val_str = str(cell.value)
-                                try:
-                                    byte_len = len(val_str.encode('big5'))
-                                except:
-                                    byte_len = len(val_str)
-                                if byte_len > max_length:
-                                    max_length = byte_len
+                                try: byte_len = len(val_str.encode('big5'))
+                                except: byte_len = len(val_str)
+                                if byte_len > max_length: max_length = byte_len
                         ws.column_dimensions[column].width = max_length + 4
 
-                    # 3. 轉化為前端一鍵下載按鈕
                     excel_data = BytesIO()
                     wb.save(excel_data)
                     excel_data.seek(0)
@@ -488,3 +470,175 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                     )
                 except Exception as e:
                     st.error(f"❌ 處理過程中發生非預期錯誤: {e}")
+
+# ==================== 🖥️ 功能三：庫存資料 + 一維碼一鍵產出 ====================
+elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🏷️ 庫存資料與一維條碼整合系統</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #555;'>對應原 VBA 巨集。請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📦 ① 拆櫃明細檔案</div>', unsafe_allow_html=True)
+        file_main = st.file_uploader("請上傳 拆櫃明細 (.xlsx)", type=["xlsx"], key="vba_main")
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">🗺️ ② 貨架位檔案</div>', unsafe_allow_html=True)
+        file_shelf = st.file_uploader("請上傳 貨架位/儲位表 (.xlsx)", type=["xlsx"], key="vba_shelf")
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col3:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📋 ③ 採購建議檔案</div>', unsafe_allow_html=True)
+        file_purchase = st.file_uploader("請上傳 採購建議/建議表 (.xlsx)", type=["xlsx"], key="vba_purchase")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.button("🚀 啟動多表交叉關聯與黃底演算", type="primary", use_container_width=True):
+        if not (file_main and file_shelf and file_purchase):
+            st.error("🚨 錯誤：您必須同時上傳「拆櫃明細」、「貨架位」與「採購建議」三份檔案才能啟動流程！")
+        else:
+            with st.spinner("正在執行跨表 VLOOKUP 高速運算與取消合併儲存格填補中..."):
+                try:
+                    # 1. 讀取主表 (拆櫃明細)
+                    df_main = pd.read_excel(file_main, skiprows=3) # 第4行為表頭
+                    # 強制規範前 11 欄名稱
+                    new_headers = ["商品編號", "商品名稱", "商品規格", "品項條碼", "箱裝數", "叫貨數量", "件數", "福北總庫存", "15日銷售", "福撿儲位", "一維條碼"]
+                    df_main.columns = new_headers[:len(df_main.columns)]
+                    
+                    # 2. 讀取並預處理「貨架位檔案」 (解決 VBA 的 UnMerge 與向下填補問題)
+                    df_shelf_raw = pd.read_excel(file_shelf)
+                    # 模擬 VBA 邏輯：第二欄為儲位，第五欄為條碼。
+                    # 在 pandas 中，取消合併後空白會讀成 NaN，直接用 ffill() 就能秒殺向下填充！
+                    df_shelf_raw.iloc[:, 1] = df_shelf_raw.iloc[:, 1].ffill()
+                    
+                    # 建立條碼到儲位的映射字典 (對應 VBA 將 E 欄剪切到 A 欄前)
+                    shelf_dict = {}
+                    for _, row in df_shelf_raw.iterrows():
+                        barcode = str(row.iloc[4]).strip() if not pd.isna(row.iloc[4]) else ""
+                        loc = str(row.iloc[1]).strip() if not pd.isna(row.iloc[1]) else ""
+                        if barcode:
+                            shelf_dict[barcode] = loc
+
+                    # 3. 讀取並預處理「採購建議檔案」
+                    df_pur_raw = pd.read_excel(file_purchase)
+                    # 建立條碼到庫存(第6欄)與銷售(第13欄)的映射字典
+                    pur_stock_dict = {}
+                    pur_sale_dict = {}
+                    for _, row in df_pur_raw.iterrows():
+                        barcode = str(row.iloc[0]).strip() if not pd.isna(row.iloc[0]) else "" # A欄條碼
+                        stock = row.iloc[5] if not pd.isna(row.iloc[5]) else 0                  # F欄庫存
+                        sale = row.iloc[12] if not pd.isna(row.iloc[12]) else 0                 # M欄銷售
+                        if barcode:
+                            pur_stock_dict[barcode] = stock
+                            pur_sale_dict[barcode] = sale
+
+                    # 4. 核心數據填充與邏輯判斷 (對應 VBA For i = 5 To lastRow)
+                    yellow_rows = set() # 記錄哪些行需要刷黃底
+                    
+                    for idx, row in df_main.iterrows():
+                        search_key = str(row["品項條碼"]).strip() if not pd.isna(row["品項條碼"]) else ""
+                        if not search_key or search_key == "nan":
+                            continue
+                        
+                        # 填入庫存與銷售 (VLOOKUP)
+                        stock_val = pur_stock_dict.get(search_key, 0)
+                        sale_val = pur_sale_dict.get(search_key, 0)
+                        df_main.at[idx, "福北總庫存"] = stock_val
+                        df_main.at[idx, "15日銷售"] = sale_val
+                        
+                        # 填入福撿儲位 (VLOOKUP)
+                        shelf_val = shelf_dict.get(search_key, "")
+                        df_main.at[idx, "福撿儲位"] = shelf_val
+                        
+                        # 填入一維條碼公式 (VBA: ="*" & D & "*")
+                        df_main.at[idx, "一維條碼"] = f'="*" & D{idx+5} & "*"'
+                        
+                        # 條件判定 (對應 VBA 步驟 7, 8, 9 的篩選過濾與黃底判定)
+                        # 排除 W-兩倉暫存區、W-線東品 以及 空白
+                        if shelf_val and shelf_val not in ["W-兩倉暫存區", "W-線東品"]:
+                            try:
+                                diff = float(stock_val) - float(sale_val)
+                                if diff <= 0:
+                                    yellow_rows.add(idx + 5) # 轉換成 Excel 實際資料列號 (從第5行開始)
+                            except:
+                                pass
+
+                    # 5. 使用 openpyxl 進行高質量視覺裝潢
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "庫存一維碼明細"
+
+                    thin_side = Side(border_style="thin", color="000000")
+                    full_border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    center_align = Alignment(horizontal='center', vertical='center')
+                    ms_font = Font(name='微軟正黑體', size=11)
+                    barcode_font = Font(name='Free 3 of 9 Extended', size=30)
+                    yellow_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid") # 溫潤優雅的淺黃
+
+                    # 寫入前四行空白/標題保護 (維持與原始拆櫃明細相同結構)
+                    for _ in range(3):
+                        ws.append([])
+                    
+                    # 寫入第4行表頭
+                    ws.append(new_headers)
+                    for col_idx in range(1, 12):
+                        cell = ws.cell(row=4, column=col_idx)
+                        cell.border = full_border
+                        cell.alignment = center_align
+                        cell.font = Font(name='微軟正黑體', size=11, bold=True)
+
+                    # 寫入資料列
+                    for _, row_data in df_main.fillna("").iterrows():
+                        ws.append(list(row_data))
+
+                    # 建立篩選器
+                    ws.auto_filter.ref = f"A4:K{ws.max_row}"
+
+                    # 格式美化與黃底填充
+                    for r_idx in range(5, ws.max_row + 1):
+                        is_yellow = r_idx in yellow_rows
+                        for c_idx in range(1, 12):
+                            cell = ws.cell(row=r_idx, column=c_idx)
+                            cell.border = full_border
+                            cell.alignment = center_align
+                            cell.font = ms_font
+                            
+                            # 如果是K欄 (一維條碼)，套用特殊的條碼字型與置中
+                            if c_idx == 11:
+                                cell.font = barcode_font
+                            
+                            # 刷上黃底標記
+                            if is_yellow:
+                                cell.fill = yellow_fill
+
+                    # 自動調整欄寬 (精準中文 Big5 長度演算)
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            if cell.value:
+                                val_str = str(cell.value)
+                                if val_str.startswith('="*'): # 跳過公式字串長度干擾
+                                    byte_len = 15
+                                else:
+                                    try: byte_len = len(val_str.encode('big5'))
+                                    except: byte_len = len(val_str)
+                                if byte_len > max_length: max_length = byte_len
+                        ws.column_dimensions[column].width = max_length + 4
+
+                    # 6. 導出前端下載
+                    excel_data = BytesIO()
+                    wb.save(excel_data)
+                    excel_data.seek(0)
+
+                    st.success("✨ VBA 庫存大整合全自動演算法執行成功！中文字體儲位已自動排除。")
+                    st.download_button(
+                        label="📥 點此一鍵下載全新庫存條碼整合 Excel 檔案",
+                        data=excel_data,
+                        file_name="#義烏櫃 拆櫃明細-福北路-庫存資料&一維條碼.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"❌ 跨表運算時發生非預期錯誤: {e}")
