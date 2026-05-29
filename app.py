@@ -100,22 +100,23 @@ st.markdown("""
         align-items: center;
     }
 
-    /* 🎨 【本次核心更新】強制重塑右上角 Toast 視窗為北歐簡約風 */
+    /* 🎨 【右上角 Toast 視窗優化】改為高對比度的深冷莫蘭迪灰背景，配極致白字 */
     div[data-testid="stToast"] {
-        background-color: #f8fafc !important; /* 質感蛋殼淺米白 */
-        border: 1px solid #cbd5e1 !important;  /* 柔和藍灰細邊框 */
-        border-radius: 8px !important;         /* 優雅小圓角 */
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important; /* 精緻微陰影 */
+        background-color: #334155 !important; /* 深冷藍灰，對比度極高 */
+        border: 1px solid #1e293b !important;  /* 深色收邊框 */
+        border-radius: 8px !important;         
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; /* 顯眼陰影 */
     }
-    /* 強制修改 Toast 內文的字體顏色與粗細，確保清晰易讀 */
+    /* 強制修改文字為粗體純白，確保在深色背景上絕對清晰 */
     div[data-testid="stToast"] .stMarkdown p {
-        color: #334155 !important;            /* 深冷灰色字體 */
-        font-weight: 500 !important;          /* 字體微加粗 */
+        color: #ffffff !important;            /* 純白字 */
+        font-weight: 600 !important;          /* 粗體加固 */
         font-size: 14px !important;
+        letter-spacing: 0.5px !important;
     }
-    /* 修改右側關閉小叉叉的顏色 */
+    /* 修改右側關閉小叉叉的顏色為淡灰 */
     div[data-testid="stToast"] button {
-        color: #64748b !important;
+        color: #94a3b8 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -280,7 +281,7 @@ with st.sidebar:
         ["📊 BS銷售更新", "➕ 其他自動化腳本"]
     )
     st.markdown("---")
-    st.caption("✨ 目前版本: V1.9 (通知美化完全體)")
+    st.caption("✨ 目前版本: V2.1 (完美平衡客製版)")
 
 # ==================== 🖥️ 右側主畫面呈現 ====================
 if app_mode == "📊 BS銷售更新":
@@ -309,7 +310,7 @@ if app_mode == "📊 BS銷售更新":
         # 📌 02. 在線產品
         st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
         uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
+        uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx'] 檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
@@ -417,6 +418,7 @@ if app_mode == "📊 BS銷售更新":
             if has_error:
                 st.warning("⚠️ 流程已結束，但過程中發生過上述錯誤攔截，部分雲端資料可能未更新完成，請檢查修正後重新上傳。")
             else:
+                # 🟢 完全維持你原本最喜歡的綠底狀態，不做任何修改
                 st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
 
 elif app_mode == "➕ 其他自動化腳本":
