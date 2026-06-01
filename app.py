@@ -107,10 +107,14 @@ st.markdown("""
         border-radius: 8px !important;         
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; 
     }
-   div[data-testid="stToast"] .stMarkdown p {
+  /* 強制將 Toast 內的所有層級文字都改為純白與粗體 */
+    div[data-testid="stToast"], 
+    div[data-testid="stToast"] div, 
+    div[data-testid="stToast"] span, 
+    div[data-testid="stToast"] p {
         color: #ffffff !important;            
-        font-weight: 600 !important;          
-        font-size: 14px !important;
+        font-weight: 900 !important;          
+        font-size: 15px !important;
         letter-spacing: 0.5px !important;
     }
     div[data-testid="stToast"] button {
