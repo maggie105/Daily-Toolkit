@@ -379,7 +379,7 @@ if app_mode == "📊 BS銷售更新":
 
 # ==================== 🖥️ 功能二：貨櫃箱號自動產出 ====================
 elif app_mode == "📦 貨櫃箱號 自動產出":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動倍增與明細產出系統</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>📦 貨櫃箱號自動產出系統</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #555;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
