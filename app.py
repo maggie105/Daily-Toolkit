@@ -501,11 +501,11 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
         file_purchase = st.file_uploader("請上傳 採購建議/建議表 (.xlsx)", type=["xlsx"], key="vba_purchase")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    if st.button("🚀 啟動多表交叉關聯與黃底演算", type="primary", use_container_width=True):
+    if st.button("🚀 啟動多表整合&自動產出", type="primary", use_container_width=True):
         if not (file_main and file_shelf and file_purchase):
             st.error("🚨 錯誤：您必須同時上傳「拆櫃明細」、「貨架位」與「採購建議」三份檔案才能啟動流程！")
         else:
-            with st.spinner("正在執行跨表 VLOOKUP 高速運算與取消合併儲存格填補中..."):
+            with st.spinner("正在執行中..."):
                 try:
                     df_main = pd.read_excel(file_main, skiprows=3)
                     new_headers = ["商品編號", "商品名稱", "商品規格", "品項條碼", "箱裝數", "叫貨數量", "件數", "福北總庫存", "15日銷售", "福撿儲位", "一維條碼"]
