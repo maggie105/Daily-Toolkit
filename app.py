@@ -389,8 +389,8 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
     st.markdown("</div>", unsafe_allow_html=True)
 
     if ctn_file is not None:
-        if st.button("🚀 啟動貨櫃數據倍增與樣式優化", type="primary", use_container_width=True):
-            with st.spinner("正在執行核心演算與 Openpyxl 視覺裝潢中..."):
+        if st.button("🚀 啟動貨櫃箱號自動產出", type="primary", use_container_width=True):
+            with st.spinner("正在執行產出中..."):
                 try:
                     df = pd.read_excel(ctn_file, skiprows=4, header=None)
                     header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
@@ -467,7 +467,7 @@ elif app_mode == "📦 貨櫃箱號 自動產出":
                     wb.save(excel_data)
                     excel_data.seek(0)
 
-                    st.success("✨ 貨櫃箱號演算與紅底優化完畢！請點擊下方按鈕下載成果：")
+                    st.success("✨ 貨櫃箱號整理&產出完畢！請點擊下方按鈕下載成果：")
                     st.download_button(
                         label="📥 點此一鍵下載全新拆櫃 Excel 檔案",
                         data=excel_data,
