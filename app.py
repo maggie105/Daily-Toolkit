@@ -812,10 +812,12 @@ elif app_mode == "🧾 正隆帳單核對":
 
                         # 2. 上傳 PDF 並指定轉換為 Google Docs 格式 (此動做會觸發 Google 免費的高精度 OCR 引擎)
                     # 💡 修改後的完美寫法（指定丟到有空間的共用資料夾）
-                      file_metadata = {
-                      'name': 'Temp_OCR_File',
-                      'mimeType': 'application/vnd.google-apps.document',
-                      'parents': ['https://drive.google.com/drive/folders/1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']  # 👈 請在此處貼上剛才複製的資料夾ID，例如 ['1aBcDeFgHiJ...']
+                     # 2. 上傳 PDF 並指定轉換為 Google Docs 格式
+                        # 💡 關鍵修正：以下這幾行全部要向右縮排 4 個空格，保持在 try: 的肚子裡面！
+                        file_metadata = {
+                            'name': 'Temp_OCR_File',
+                            'mimeType': 'application/vnd.google-apps.document',
+                            'parents': ['https://drive.google.com/drive/folders/1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']
                         }
                         
                         pdf_bytes = pdf_file.getvalue()
