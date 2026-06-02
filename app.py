@@ -824,8 +824,13 @@ elif app_mode == "🧾 正隆帳單核對":
                         pdf_bytes = pdf_file.getvalue()
                         media = MediaIoBaseUpload(BytesIO(pdf_bytes), mimetype='application/pdf', resumable=True)
                         
+                        # 💡 修正後的終極穿透空間版本
                         uploaded_file = drive_service.files().create(
-                            body=file_metadata, media_body=media, fields='id'
+                            body=file_metadata, 
+                            media_body=media, 
+                            fields='id',
+                            supportsAllDrives=True,    # 👈 保持開啟
+                            supportsTeamDrives=True    # 👈 強制補上這一行！允許借用外部共用硬碟與資料夾空間
                         ).execute()
                         
                         file_id = uploaded_file.get('id')
