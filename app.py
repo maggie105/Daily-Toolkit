@@ -811,26 +811,25 @@ elif app_mode == "🧾 正隆帳單核對":
                         drive_service = build('drive', 'v3', credentials=creds)
                         st.info(f"🔍 目前網頁端正在使用的機器人信箱為：`{creds.service_account_email}`")
 
-                        # 2. 上傳 PDF 並指定轉換為 Google Docs 格式 (此動做會觸發 Google 免費的高精度 OCR 引擎)
-                    # 💡 修改後的完美寫法（指定丟到有空間的共用資料夾）
-                     # 2. 上傳 PDF 並指定轉換為 Google Docs 格式
-                        # 💡 關鍵修正：以下這幾行全部要向右縮排 4 個空格，保持在 try: 的肚子裡面！
+                        # 💡 請換成這一段完全體 (加入了 enforceSingleParent=True 與 supportsTeamDrives=True)
+                        # 2. 上傳 PDF 並指定轉換為 Google Docs 格式
                         file_metadata = {
                             'name': 'Temp_OCR_File',
                             'mimeType': 'application/vnd.google-apps.document',
-                            'parents': ['1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']
+                            'parents': ['1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']  # 這是您的共用雲端硬碟 ID
                         }
                         
                         pdf_bytes = pdf_file.getvalue()
                         media = MediaIoBaseUpload(BytesIO(pdf_bytes), mimetype='application/pdf', resumable=True)
                         
-                        # 💡 修正後的終極穿透空間版本
+                        # 💡 針對「共用雲端硬碟」最完整的權限與空間穿透配置
                         uploaded_file = drive_service.files().create(
                             body=file_metadata, 
                             media_body=media, 
                             fields='id',
-                            supportsAllDrives=True,    # 👈 保持開啟
-                            supportsTeamDrives=True    # 👈 強制補上這一行！允許借用外部共用硬碟與資料夾空間
+                            supportsAllDrives=True,       # 允許穿透共用雲端硬碟
+                            supportsTeamDrives=True,       # 允許穿透團隊硬碟
+                            enforceSingleParent=True      # 強制鎖定共用硬碟空間，徹底解決 403 空間問題
                         ).execute()
                         
                         file_id = uploaded_file.get('id')
