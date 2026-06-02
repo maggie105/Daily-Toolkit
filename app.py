@@ -631,14 +631,162 @@ elif app_mode == "🏷️ 庫存資料+一維碼 一鍵產出":
 
 # ==================== 🖥️ 功能四：正隆帳單核對 ====================
 elif app_mode == "🧾 正隆帳單核對":
-    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單 PDF 自動化核對系統</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #555;'>我們準備開始依序邊寫、邊測試這個核心 PDF 提取腳本。請先上傳您的原始 PDF 帳單檔進行地基測試。</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2b5c8f; font-weight: 700;'>🧾 正隆帳單自動化核對系統</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #555;'>本系統分為兩個階段：【第一階段】整合 LINE 對話叫貨紀錄，以及【第二階段】核對正隆帳單 PDF。請依序操作。</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📄 請上傳正隆帳單 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
-    pdf_file = st.file_uploader("將 PDF 檔案拖放到此處", type=["pdf"], key="updf_billing")
-    st.markdown("</div>", unsafe_allow_html=True)
+    # 建立兩個分頁，方便未來擴充第二階段
+    tab1, tab2 = st.tabs(["📱 第一階段：整合 LINE 叫貨紀錄", "📄 第二階段：正隆帳單 PDF 核對"])
 
-    if pdf_file is not None:
-        st.info("🎯 偵測到 PDF 檔案！我們隨時可以開始進行步驟二的『提取核心邏輯開發』。")
+    # ------------------ 📱 TAB 1: LINE 紀錄整合 ------------------
+    with tab1:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📅 步驟 1：選擇篩選日期區間</div>', unsafe_allow_html=True)
+        
+        # 使用 Streamlit 行事曆元件，免去手動輸入 MM/DD 的麻煩與格式錯誤風險
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            start_date = st.date_input("開始日期", value=pd.Timestamp.now().floor('D') - pd.Timedelta(days=30), key="line_start")
+        with col_d2:
+            end_date = st.date_input("結束日期", value=pd.Timestamp.now().floor('D'), key="line_end")
+            
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📁 步驟 2：上傳 LINE 對話紀錄檔案 (.txt)</div>', unsafe_allow_html=True)
+        line_file = st.file_uploader("請上傳 `[LINE]桃園正隆X沐樂.txt` 檔案", type=["txt"], key="uline_chat")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if line_file is not None:
+            # 讀取上傳的 TXT 文字，支援多種編碼格式防呆
+            raw_chat_data = ""
+            file_bytes = line_file.read()
+            for enc in ['utf-8', 'utf-16', 'cp950']:
+                try:
+                    raw_chat_data = file_bytes.decode(enc)
+                    break
+                except:
+                    continue
+
+            if not raw_chat_data:
+                st.error("🚨 無法解析該文字檔的編碼，請確認檔案是否損毀或使用標準 TXT 格式。")
+            else:
+                # ------------------ 核心解析演算法邏輯 ------------------
+                current_year = start_date.year
+                start_dt = datetime(start_date.year, start_date.month, start_date.day)
+                end_dt = datetime(end_date.year, end_date.month, end_date.day)
+
+                anchor_text = "07:38 善敏 01/05(一)排程報告："
+                report_start = raw_chat_data.find(anchor_text)
+                data_to_process = raw_chat_data[report_start + len(anchor_text):] if report_start != -1 else raw_chat_data
+
+                order_marker_pattern = r"您好\s*[，,]\s*與您訂購紙箱"
+                order_markers = list(re.finditer(order_marker_pattern, data_to_process))
+                date_pattern = r"(?<![:\d\-])(?:\d{4}/)?(\d{1,2})/(\d{1,2})(?!\d)"
+                all_dates = list(re.finditer(date_pattern, data_to_process))
+                timestamp_pattern = r"(?m)^\d{1,2}:\d{2}\s"
+                all_timestamps = list(re.finditer(timestamp_pattern, data_to_process))
+
+                results = []
+                for o_idx, o_match in enumerate(order_markers):
+                    order_pos = o_match.start()
+                    nearest_date = None
+                    for d_match in all_dates:
+                        if d_match.start() < order_pos: 
+                            nearest_date = d_match
+                        else: 
+                            break
+                    
+                    if not nearest_date: 
+                        continue
+                    try:
+                        msg_dt = datetime(current_year, int(nearest_date.group(1)), int(nearest_date.group(2)))
+                    except: 
+                        continue
+                    
+                    if not (start_dt <= msg_dt <= end_dt): 
+                        continue
+                    
+                    next_timestamp_pos = len(data_to_process)
+                    for t_match in all_timestamps:
+                        if t_match.start() > order_pos:
+                            next_timestamp_pos = t_match.start()
+                            break
+                    
+                    next_order_pos = order_markers[o_idx+1].start() if o_idx + 1 < len(order_markers) else len(data_to_process)
+                    block_end = min(next_timestamp_pos, next_order_pos)
+                    order_block = data_to_process[o_match.start():block_end]
+                    
+                    name_m = re.search(r"收件人(?:姓名)?[:：]\s*(.*)", order_block)
+                    addr_m = re.search(r"(?:收件人地址|收件地址|收貨地址|地址)[:：]\s*(.*)", order_block)
+                    name = name_m.group(1).strip() if name_m else "未填"
+                    addr = addr_m.group(1).strip() if addr_m else "未填"
+                    
+                    size_pattern = r"(\d+(?:\.\d+)?\s*\*\s*\d+(?:\.\d+)?\s*\*\s*\d+(?:\.\d+)?)"
+                    qty_pattern = r"(\d+)\s*個"
+                    all_sizes = list(re.finditer(size_pattern, order_block))
+                    
+                    for s_idx, s_match in enumerate(all_sizes):
+                        size_val = s_match.group(1).replace(" ", "")
+                        qty_m = re.search(qty_pattern, order_block[s_match.end():])
+                        if qty_m:
+                            results.append({
+                                "訂購尺寸": size_val,
+                                "叫貨日期": msg_dt.strftime("%Y/%m/%d"),
+                                "數量": int(qty_m.group(1)),
+                                "未稅單價": "", "未稅總價": "", "含稅總價": "",
+                                "收件人姓名": name, "收件人地址": addr
+                            })
+
+                # ------------------ 畫面顯示與同步處理 ------------------
+                if results:
+                    results = sorted(results, key=lambda x: (x["叫貨日期"], x["訂購尺寸"]))
+                    df_results = pd.DataFrame(results)
+                    
+                    st.markdown("### 📊 偵測並解析成功之訂單預覽")
+                    st.dataframe(df_results, use_container_width=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("☁️ 確認無誤，一鍵回填至雲端 Google Sheets", type="primary", use_container_width=True):
+                        with st.spinner("正在連線並上傳至雲端試算表..."):
+                            try:
+                                client = get_gspread_client()
+                                if client:
+                                    # 使用本地 parse_order.py 設定之專屬 SHEET_ID 與工作表名稱
+                                    LINE_SHEET_ID = "1hklqBQ_9Z0HZcgHF-3Kl1jdXqDa13NXOqwHZ1BZnxQg"
+                                    LINE_SHEET_NAME = "叫貨紀錄"
+                                    
+                                    sh = client.open_by_key(LINE_SHEET_ID)
+                                    worksheet = sh.worksheet(LINE_SHEET_NAME)
+                                    
+                                    first_row = worksheet.row_values(1)
+                                    headers = ["訂購尺寸", "叫貨日期", "數量", "未稅單價", "未稅總價", "含稅總價", "收件人姓名", "收件人地址"]
+                                    
+                                    if not first_row:
+                                        worksheet.insert_row(headers, 1)
+                                    
+                                    rows_to_append = []
+                                    for d in results:
+                                        rows_to_append.append([
+                                            d.get("訂購尺寸", ""), d.get("叫貨日期", ""), d.get("數量", ""),
+                                            d.get("未稅單價", ""), d.get("未稅總價", ""), d.get("含稅總價", ""),
+                                            d.get("收件人姓名", ""), d.get("收件人地址", "")
+                                        ])
+                                    
+                                    worksheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
+                                    st.toast(f"✅ 成功同步 {len(rows_to_append)} 筆資料到雲端！")
+                                    st.success(f"✨ 雲端同步完成！已成功回填 {len(rows_to_append)} 筆叫貨資料。")
+                            except Exception as e:
+                                st.error(f"❌ 雲端上傳失敗：{e}")
+                else:
+                    st.warning("⚠️ 在選擇的日期區間內，找不到符合格式的訂單數據。請檢查日期區間是否正確。")
+
+    # ------------------ 📄 TAB 2: PDF 帳單核對 (地基留空) ------------------
+    with tab2:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📄 請上傳正隆帳單 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
+        pdf_file = st.file_uploader("將 PDF 檔案拖放到此處", type=["pdf"], key="updf_billing_main")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if pdf_file is not None:
+            st.info("🎯 偵測到 PDF 檔案！第一階段 LINE 紀錄對接完成後，我們隨時可以著手編寫本分頁的『PDF 核心欄位提取與自動對帳邏輯』。")
