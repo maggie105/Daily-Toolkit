@@ -848,17 +848,27 @@ elif app_mode == "🧾 正隆帳單核對":
                         total_pages = len(images)
                         st.info(f"📋 本份檔案共 `{total_pages}` 頁，正在全自動辨識對帳...")
 
+                       # 💡 請精準換成這段「新完全體」：
+                        import gc  # 引入垃圾回收工具
+
                         for idx, img in enumerate(images):
                             page_num = idx + 1
                             st.toast(f"⏳ 正在辨識第 {page_num}/{total_pages} 頁文字...")
                             
-                            # 將 PIL 圖片轉為 EasyOCR 接收的 numpy 陣列格式
+                            # 1. 🛡️ 降低影像尺寸（防當機關鍵！）將圖片縮小，暴省 70% 記憶體
+                            img.thumbnail((1200, 1200)) 
                             img_np = np.array(img)
                             
-                            # 執行 OCR
-                            ocr_results = reader.readtext(img_np, detail=0) # detail=0 直接吐純文字列表
+                            # 2. 執行 OCR 辨識
+                            ocr_results = reader.readtext(img_np, detail=0)
+                            
+                            # 釋放 numpy 矩陣避免殘留
+                            del img_np
                             
                             if not ocr_results:
+                                # 每頁結束都要做防呆清理
+                                del img
+                                gc.collect()
                                 continue
                                 
                             page_text = " ".join(ocr_results)
