@@ -6,3 +6,4 @@ oauth2client
 google-api-python-client
 google-cloud-vision
 pdf2image
+pypdf
