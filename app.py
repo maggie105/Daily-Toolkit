@@ -817,7 +817,7 @@ elif app_mode == "🧾 正隆帳單核對":
                         file_metadata = {
                             'name': 'Temp_OCR_File',
                             'mimeType': 'application/vnd.google-apps.document',
-                            'parents': ['https://drive.google.com/drive/folders/1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']
+                            'parents': ['1fR0E2oUqiRBkdR58VAJ8ooO2Im381zfE']
                         }
                         
                         pdf_bytes = pdf_file.getvalue()
