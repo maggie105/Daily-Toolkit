@@ -13,8 +13,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload  
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
-from google.cloud import vision
-from google.oauth2 import service_account
 
 # 1. 隱藏 openpyxl 的格式警告
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
