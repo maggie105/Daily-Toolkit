@@ -809,6 +809,7 @@ elif app_mode == "🧾 正隆帳單核對":
                             creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
                         
                         drive_service = build('drive', 'v3', credentials=creds)
+                        st.info(f"🔍 目前網頁端正在使用的機器人信箱為：`{creds.service_account_email}`")
 
                         # 2. 上傳 PDF 並指定轉換為 Google Docs 格式 (此動做會觸發 Google 免費的高精度 OCR 引擎)
                     # 💡 修改後的完美寫法（指定丟到有空間的共用資料夾）
