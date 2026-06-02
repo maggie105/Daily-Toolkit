@@ -817,7 +817,7 @@ elif app_mode == "🧾 正隆帳單核對":
                         }
                         
                         pdf_bytes = pdf_file.getvalue()
-                        media = MediaIoBaseUpload(BytesIO(pdf_bytes), mimeType='application/pdf', resumable=True)
+                        media = MediaIoBaseUpload(BytesIO(pdf_bytes), mimetype='application/pdf', resumable=True)
                         
                         uploaded_file = drive_service.files().create(
                             body=file_metadata, media_body=media, fields='id'
