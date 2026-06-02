@@ -922,6 +922,10 @@ elif app_mode == "🧾 正隆帳單核對":
                                     })
                                     
                             progress_bar.progress(page_num / total_pages)
+                            
+                            # 🛡️ 【最核心的防崩潰盾牌】請在 progress 欄位下方補上這兩行！
+                            del img
+                            gc.collect()
 
                         # 4. 數據渲染與交叉核對
                         st.success("✨ 49頁數據完全辨識與清洗完畢！")
