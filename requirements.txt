@@ -3,5 +3,7 @@ pandas
 openpyxl
 gspread
 oauth2client
-pypdf
 google-api-python-client
+pypdf
+pdf2image
+pytesseract
