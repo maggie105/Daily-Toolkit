@@ -6,7 +6,7 @@ import json
 from openai import OpenAI
 
 # 初始化 OpenAI 客戶端（請替換為你的 API Key，或使用 st.secrets）
-client = OpenAI(api_key="YOUR_OPENAI_API_KEY_HERE")
+client = OpenAI(api_key="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")
 
 # 這裡不需再寫 st.set_page_config(layout="wide")，因為主架構會依循 app.py
 st.title("📊 工時表自動化複檢系統")
