@@ -6,7 +6,7 @@ import json
 from openai import OpenAI
 
 # 初始化 OpenAI 客戶端
-client = OpenAI(api_key="YOUR_OPENAI_API_KEY_HERE")
+client = OpenAI(api_key="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")
 
 # 1. 隱藏原生多頁面自動生成的選單，並維持統一的漂亮側邊欄
 st.markdown("""
