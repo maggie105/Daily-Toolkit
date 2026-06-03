@@ -8,13 +8,35 @@ from openai import OpenAI
 # 初始化 OpenAI 客戶端（記得把這裡換成你的 sk-... 金鑰喔）
 client = OpenAI(api_key="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")
 
-# 1. 隱藏原生多頁面選單，維持高質感側邊欄
+# 1. 隱藏原生多頁面選單，並透過 CSS 自訂版面寬度與字體大小
 st.markdown("""
     <style>
+        /* 隱藏原生多頁面自動生成的選單 */
         [data-testid="stSidebarNav"] {display: none !important;}
+        
+        /* 🛠️ 強迫 Streamlit 主區塊填滿靠左，減少左右白邊，放大使用空間 */
+        .main .block-container {
+            max-width: 95% !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+        }
+        
+        /* 🎨 精細化字體：精準縮小三個主要標題 */
+        .custom-title {
+            font-size: 1.6rem !important;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+        .custom-subtitle {
+            font-size: 1.1rem !important;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            margin-bottom: 0.8rem;
+        }
     </style>
 """, unsafe_allow_html=True)
 
+# 2. 高質感客製化側邊欄選單
 with st.sidebar:
     st.markdown("# 🧰 每日工具包中心")
     st.markdown("---")
@@ -22,13 +44,14 @@ with st.sidebar:
     st.page_link("app.py", label="🏠 數據處理中心 (四大工具)", use_container_width=True)
     st.page_link("pages/5_工時表自動化複檢.py", label="📊 工時表自動化複檢", use_container_width=True)
     st.markdown("---")
-    st.caption("✨ 目前版本: V3.6 (強控防錯版)")
+    st.caption("✨ 目前版本: V3.7 (精緻版型優化)")
 
-# 2. 主頁面視覺
-st.title("📊 工時表自動化複檢系統")
-st.markdown("<p style='color: #666666; font-size: 1rem;'>上傳手寫工時表照片，系統將自動進行 AI 字體辨識、動態複算工時，並即時審計發放薪資。</p>", unsafe_allow_html=True)
+# 3. 主頁面標題區（字級已縮小對齊）
+st.markdown('<div class="custom-title">📊 工時表自動化複檢系統</div>', unsafe_allow_html=True)
+st.markdown("<p style='color: #666666; font-size: 0.85rem; margin-bottom: 0px;'>上傳手寫工時表照片，系統將自動進行 AI 字體辨識、動態複算工時，並即時審計發放薪資。</p>", unsafe_allow_html=True)
 st.markdown("---")
 
+# 4. 影像處理與 AI 核心邏輯
 def encode_image_to_base64(uploaded_file):
     bytes_data = uploaded_file.getvalue()
     return base64.b64encode(bytes_data).decode('utf-8')
@@ -50,7 +73,7 @@ def analyze_timesheet(base64_image):
     4. 工時計算邏輯：
        - 只要備註欄寫了「12:00-12:30」，代表午休 0.5 小時。
        - 計算公式：AI理論工時 = (下班時間 - 上班時間) - 0.5 小時。
-       - 比對：檢查「AI理論工時」是否與「主管簽名時數」完全相等。
+       - 比對：檢查「AI理論工時'] 是否與「主管簽名時數」完全相等。
 
     請嚴格以下列 JSON 格式回傳結果，不要包含任何 Markdown 標籤，確保能被 json.loads 解析：
     {
@@ -106,11 +129,11 @@ def analyze_timesheet(base64_image):
     )
     return json.loads(response.choices[0].message.content)
 
-# 左右雙欄版面排版
-col1, col2 = st.columns([1, 1.2])
+# 5. 左右雙欄版面排版 (已解除寬度限制，欄間距加大)
+col1, col2 = st.columns([1, 1.2], gap="large")
 
 with col1:
-    st.subheader("📸 1. 上傳來源圖片")
+    st.markdown('<div class="custom-subtitle">📸 1. 上傳來源圖片</div>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("請選擇或拖曳工時表照片 (JPG/PNG)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
     
     if uploaded_file is not None:
@@ -118,7 +141,7 @@ with col1:
         st.image(image, caption="已上傳的工時表照片", use_container_width=True)
 
 with col2:
-    st.subheader("👁️ 2. AI 辨識與複算結果")
+    st.markdown('<div class="custom-subtitle">👁️ 2. AI 辨識與複算結果</div>', unsafe_allow_html=True)
     
     if uploaded_file is not None:
         if st.button("🚀 開始自動化複檢", type="primary", use_container_width=True):
@@ -131,6 +154,7 @@ with col2:
                     
                     st.success("🎉 辨識與計算完成！")
                     
+                    # 呈現總額數據卡片
                     m_col1, m_col2, m_col3 = st.columns(3)
                     m_col1.metric("員工姓名", info["name"])
                     m_col2.metric("總時數核對", f"{audit['ai_total_hours']} 小時", f"手寫: {info['handwritten_total_hours']}")
@@ -142,6 +166,7 @@ with col2:
                     else:
                         st.error(f"❌ **發現邏輯不符落差**：{audit['summary_notes']}")
                     
+                    # 輸出每日明細表格
                     df_daily = pd.DataFrame(result["daily_records"])
                     df_daily.columns = ["日期", "上班時間", "下班時間", "備註", "主管簽名時數", "AI理論工時", "工時吻合"]
                     st.write("### 📅 每日明細比對清單")
