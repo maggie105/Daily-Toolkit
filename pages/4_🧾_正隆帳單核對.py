@@ -227,7 +227,7 @@ with tab1:
 # ------------------ 📄 TAB 2: PDF 帳單核對 ------------------
 with tab2:
     st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📄 步驟 1：請上傳正隆帳單混合 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="custom-section-title">📄 步驟 2：請上傳正隆帳單混合 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
     pdf_file = st.file_uploader("將正隆帳單 PDF 檔案拖放到此處", type=["pdf"], key="updf_billing_main", label_visibility="collapsed")
     st.markdown("</div>", unsafe_allow_html=True)
     
