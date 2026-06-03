@@ -5,12 +5,29 @@ import base64
 import json
 from openai import OpenAI
 
-# 初始化 OpenAI 客戶端（請替換為你的 API Key，或使用 st.secrets）
-client = OpenAI(api_key="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")
+# 初始化 OpenAI 客戶端
+client = OpenAI(api_key="YOUR_OPENAI_API_KEY_HERE")
 
-# 這裡不需再寫 st.set_page_config(layout="wide")，因為主架構會依循 app.py
+# 1. 隱藏原生多頁面自動生成的選單，並維持統一的漂亮側邊欄
+st.markdown("""
+    <style>
+        [data-testid="stSidebarNav"] {display: none !important;}
+    </style>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("# 🧰 每日工具包中心")
+    st.markdown("---")
+    st.markdown("### 🗂️ 功能導覽選單")
+    st.page_link("app.py", label="🏠 數據處理中心 (四大工具)", use_container_width=True)
+    st.page_link("pages/5_工時表自動化複檢.py", label="📊 工時表自動化複檢", use_container_width=True)
+    st.markdown("---")
+    st.caption("✨ 目前版本: V3.5 (UI 高質感優化版)")
+
+# --- 主頁面視覺調整 (對齊 BigSeller 系統的字級) ---
 st.title("📊 工時表自動化複檢系統")
-st.subheader("上傳手寫工時表照片，自動辨識、複算工時與薪資")
+st.markdown("<p style='color: #666666; font-size: 1rem;'>上傳手寫工時表照片，系統將自動進行 AI 字體辨識、動態複算工時，並即時審計發放薪資。</p>", unsafe_allow_html=True)
+st.markdown("---")
 
 def encode_image_to_base64(uploaded_file):
     bytes_data = uploaded_file.getvalue()
@@ -52,20 +69,23 @@ def analyze_timesheet(base64_image):
     )
     return json.loads(response.choices[0].message.content)
 
-# 介面排版
+# 左右雙欄版面排版
 col1, col2 = st.columns([1, 1.2])
 
 with col1:
-    st.header("📸 1. 上傳來源圖片")
-    uploaded_file = st.file_uploader("請選擇或拖曳工時表照片 (JPG/PNG)", type=["jpg", "jpeg", "png"])
+    # 使用 subheader 並搭配正確的說明文字級別，對齊主頁設計
+    st.subheader("📸 1. 上傳來源圖片")
+    uploaded_file = st.file_uploader("請選擇或拖曳工時表照片 (JPG/PNG)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption="已上傳的工時表照片", use_container_width=True)
 
 with col2:
-    st.header("🤖 2. AI 辨識與複算結果")
+    st.subheader("👁️ 2. AI 辨識與複算結果")
+    
     if uploaded_file is not None:
-        if st.button("🚀 開始自動化複檢", type="primary"):
+        if st.button("🚀 開始自動化複檢", type="primary", use_container_width=True):
             with st.spinner("AI 正在辨識字體並動態計算中..."):
                 try:
                     base64_img = encode_image_to_base64(uploaded_file)
@@ -94,4 +114,5 @@ with col2:
                 except Exception as e:
                     st.error(f"執行過程中發生錯誤: {e}")
     else:
-        st.info("請先在左側上傳工時表圖片。")
+        # 提示區塊底色會自動完美融合淺色主題
+        st.info("請先在左側上傳工時表圖片，系統將自動為您輸出對比明細。")
