@@ -3,3 +3,5 @@ pandas
 numpy
 gspread
 oauth2client
+pdf2image 
+openpyxl  
