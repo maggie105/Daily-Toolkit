@@ -6,5 +6,5 @@ gspread
 oauth2client
 pdf2image
 pillow
-paddlepaddle==3.1.0
+paddlepaddle
 paddleocr
