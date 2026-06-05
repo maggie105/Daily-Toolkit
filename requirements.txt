@@ -1,10 +1,10 @@
 streamlit
 pandas
+numpy
 openpyxl
 gspread
 oauth2client
-google-api-python-client
-pypdf
 pdf2image
-pytesseract
-openai
+pillow
+paddlepaddle==3.1.0
+paddleocr
