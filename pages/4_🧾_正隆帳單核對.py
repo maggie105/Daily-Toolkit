@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import re
+import io
 import json
 import gspread
 from datetime import datetime
@@ -61,7 +62,7 @@ st.markdown("---")
 
 tab1, tab2 = st.tabs(["📱 第一階段：整合 LINE 叫貨紀錄", "📄 第二階段：正隆帳單 PDF 核對"])
 
-# ------------------ 📱 TAB 1: LINE 紀錄整合 ------------------
+# ------------------ 📱 TAB 1: LINE 紀錄整合（原樣保留，未更動）------------------
 with tab1:
     st.markdown('<div class="upload-card">', unsafe_allow_html=True)
     st.markdown('<div class="custom-section-title">📅 步驟 1：選擇篩選日期區間</div>', unsafe_allow_html=True)
@@ -125,159 +126,82 @@ with tab1:
                             if not worksheet.row_values(1): worksheet.insert_row(["訂購尺寸", "叫貨日期", "數量", "未稅單價", "未稅總價", "含稅總價", "收件人姓名", "收件人地址"], 1)
                             worksheet.append_rows([[d.get(h, "") for h in ["訂購尺寸", "叫貨日期", "數量", "未稅單價", "未稅總價", "含稅總價", "收件人姓名", "收件人地址"]] for d in results], value_input_option='USER_ENTERED')
                             st.success("✨ 雲端同步完成！")
+                        else:
+                            st.error("❌ 找不到雲端憑證（service_account.json 或 st.secrets）。")
                     except Exception as e: st.error(f"❌ 上傳失敗：{e}")
             else: st.warning("⚠️ 查無訂單數據。")
 
-# ------------------ 📄 TAB 2: PDF 帳單核對 ------------------
+# ------------------ 📄 TAB 2: PDF 帳單核對（改用 PaddleOCR 引擎）------------------
 with tab2:
     st.markdown('<div class="upload-card">', unsafe_allow_html=True)
     st.markdown('<div class="custom-section-title">📄 步驟 1：請上傳正隆帳單混合 PDF 原始檔案 (.pdf)</div>', unsafe_allow_html=True)
     pdf_file = st.file_uploader("將正隆帳單 PDF 檔案拖放到此處", type=["pdf"], key="updf_billing_main", label_visibility="collapsed")
+    col_o1, col_o2 = st.columns(2)
+    with col_o1:
+        dpi = st.select_slider("OCR 解析度 DPI", options=[150, 200, 250, 300], value=200, key="pdf_dpi",
+                               help="PaddleOCR 對解析度不敏感，200 通常已足夠且較快")
+    with col_o2:
+        debug = st.checkbox("🔧 除錯模式（顯示逐頁判斷）", value=False, key="pdf_debug")
     st.markdown("</div>", unsafe_allow_html=True)
     
-    if pdf_file is not None and st.button("🚀 啟動高精細度「四向暴力旋轉」極致對帳引擎", type="primary", use_container_width=True):
-        with st.spinner("正在進行全自動物理翻轉、明細跨行配對與真實品名動態抓取..."):
+    if pdf_file is not None and st.button("🚀 啟動 PaddleOCR 對帳引擎", type="primary", use_container_width=True):
+        with st.spinner("PaddleOCR 辨識與對帳進行中…（首次會載入模型，請稍候）"):
             try:
-                import pytesseract, gc
-                from pdf2image import convert_from_bytes
-                
-                # 金額提取核心
-                def extract_amounts(text):
-                    out = []
-                    for m in re.finditer(r"(?<!\d)\d{1,3}\.\d{3}(?!\d)|(?<!\d)\d{1,3}(?:,\d{3})+(?!\d)|(?<![\d.,])\d{2,5}(?![\d.])", text):
-                        s = m.group()
-                        v = int(s.replace(".", "")) if re.match(r"^\d{1,3}\.\d{3}$", s) else int(s.replace(",", "")) if "," in s else int(s)
-                        if 50 <= v < 1e7: out.append((m.start(), v))
-                    return out
-                    
-                # 三元組配對演算法
-                def find_triple(amounts):
-                    for start in range(len(amounts)):
-                        win = amounts[start:start + 8] 
-                        m = len(win)
-                        for i in range(m):
-                            for j in range(m):
-                                if i == j: continue
-                                for k in range(m):
-                                    if k == i or k == j: continue
-                                    a, b, c = win[i][1], win[j][1], win[k][1]
-                                    if abs(a + b - c) <= 2 and a > b > 0 and b <= a * 0.06 + 2: return (a, b, c)
-                    return None
+                from recon_engine import process_pdf   # 根目錄的 PaddleOCR 引擎
+                df_stmt, df_inv, df_recon, log = process_pdf(
+                    pdf_bytes=pdf_file.getvalue(), dpi=dpi, debug=debug)
 
-                # 💡 優化：維持 180 DPI 高清轉換
-                images = convert_from_bytes(pdf_file.getvalue(), dpi=180)
-                stmt_res, inv_res = [], []
-                
-                total_pages = len(images)
-                progress_bar = st.progress(0.0)
-                
-                for idx, img in enumerate(images):
-                    page_num = idx + 1
-                    st.toast(f"⏳ 正在全量深度掃描第 {page_num}/{total_pages} 頁...")
-                    
-                    # 💡 【核心重構 1】四向暴力旋轉防禦線：直接輪詢四個角度，直到抓到發票特徵文字，徹底消滅橫躺歪斜導致的漏抓
-                    best_text = ""
-                    found_invoice_on_page = False
-                    
-                    for angle in [0, 90, 180, 270]:
-                        test_img = img if angle == 0 else img.rotate(angle, expand=True)
-                        txt = pytesseract.image_to_string(test_img, lang='chi_tra+eng')
-                        
-                        # 只要在該角度下能抓到標準的發票字樣或號碼，就認定這是正確方向
-                        if re.search(r"[A-Z]{2}\d{8}", txt) or "對帳單" in txt or "發票" in txt:
-                            best_text = txt
-                            img = test_img # 物理鎖定這個正確的角度
-                            if re.search(r"[A-Z]{2}\d{8}", txt):
-                                found_invoice_on_page = True
-                            break
-                    
-                    if not best_text.strip(): 
-                        del img; gc.collect(); continue
-                        
-                    lines = [l.strip() for l in best_text.split('\n') if l.strip()]
-                    flat = best_text.replace(" ", "").replace("\n", "")
-                    
-                    # ---- A. 解析對帳單明細頁面 ----
-                    for l_idx, line in enumerate(lines):
-                        if re.search(r"([A-Z]{2}\d{8})", line):
-                            inv_no = re.search(r"([A-Z]{2}\d{8})", line).group(1)
-                            
-                            # 💡 【核心重構 2】精準對帳單品名抓取（不通靈切片）
-                            # 尋找包含 "版費"、"*" 乘號或者是特殊括號描述的規格段落
-                            size_val = "正隆常規紙箱"
-                            size_match = re.search(r"(\d+\*\d+\*\d+.*?|\b版費\b|[\u4e00-\u9fff]+\(\d+.*?\))", line)
-                            if size_match:
-                                size_val = size_match.group(1).split(" ")[0].strip()
-                            else:
-                                # 萬一被切行，去下一行抓
-                                if l_idx + 1 < len(lines):
-                                    next_m = re.search(r"(\d+\*\d+\*\d+.*?|\b版費\b)", lines[l_idx+1])
-                                    if next_m: size_val = next_m.group(1).split(" ")[0].strip()
-                            
-                            # 直接拿整行或跨行進行金額配對，確保公式判定穩定過關
-                            triple = find_triple(extract_amounts(line))
-                            if not triple and l_idx + 1 < len(lines): 
-                                triple = find_triple(extract_amounts(line + " " + lines[l_idx+1]))
-                                
-                            if triple: 
-                                stmt_res.append({
-                                    "發票號碼": inv_no, "品名規格": size_val, "數量": "明細", 
-                                    "未稅金額": float(triple[0]), "稅額": float(triple[1]), "總金額": float(triple[2])
-                                })
-                                
-                    # ---- B. 解析電子發票證明聯頁面 ----
-                    if "電子發票" in flat or "發票證明聯" in flat:
-                        inv_no_m = re.search(r"([A-Z]{2}\d{8})", best_text)
-                        inv_no = inv_no_m.group(1) if inv_no_m else "未知發票"
-                        
-                        # 💡 【核心重構 3】拒絕 Hardcode！真正動態提取電子發票裡面的「真實品名」
-                        # 電子發票品名通常在一行文字的開頭，後面跟著數量 1、單價等
-                        detected_item_name = "電子發票規格明細"
-                        for inv_line in lines:
-                            # 尋找發票下半部的品名列特徵：包含版費、或是包含長寬高乘號、且非中文字
-                            if "版費" in inv_line or ("*" in inv_line and any(c.isdigit() for c in inv_line)):
-                                # 清洗掉前後的數字，只保留品名主體
-                                item_m = re.search(r"([\u4e00-\u9fff\w\(\)\*\-]+)", inv_line)
-                                if item_m and not item_m.group(1).isdigit():
-                                    detected_item_name = item_m.group(1)
-                                    break
-                        
-                        triple = find_triple(extract_amounts(best_text))
-                        if triple: 
-                            inv_res.append({
-                                "發票號碼": inv_no, "品名規格": detected_item_name, "數量": "1", 
-                                "單價": float(triple[0]), "營業稅": float(triple[1]), "總計": float(triple[2])
-                            })
-                    
-                    progress_bar.progress(page_num / total_pages)
-                    del img; gc.collect()
+                # ---- 摘要指標 ----
+                vc = df_recon["狀態"].value_counts()
+                n_ok = int(vc.get("✓ 一致", 0)); n_total = len(df_recon)
+                m1, m2, m3 = st.columns(3)
+                m1.metric("✓ 一致",       n_ok)
+                m2.metric("⚠ 缺值待人工",  int(vc.get("⚠ 缺值待人工", 0)))
+                m3.metric("❌ 差異待人工",  int(vc.get("❌ 差異待人工", 0)))
+                if n_total:
+                    st.progress(n_ok / n_total, text=f"自動對上 {n_ok}/{n_total}（{n_ok/n_total:.0%}）")
 
-                # 資料呈現
-                df_stmt = pd.DataFrame(stmt_res).drop_duplicates(subset=['發票號碼', '總金額']) if stmt_res else pd.DataFrame(columns=["發票號碼", "品名規格", "數量", "未稅金額", "稅額", "總金額"])
-                df_inv = pd.DataFrame(inv_res).drop_duplicates(subset=['發票號碼', '總計']) if inv_res else pd.DataFrame(columns=["發票號碼", "品名規格", "數量", "單價", "營業稅", "總計"])
-                
+                # ---- 明細兩欄 ----
                 c1, c2 = st.columns(2)
-                with c1: 
-                    st.markdown("#### 📊 1. 對帳單明細全量提取結果")
-                    st.dataframe(df_stmt, use_container_width=True)
-                with c2: 
-                    st.markdown("#### 📄 2. 電子發票證明聯明細結果")
-                    st.dataframe(df_inv, use_container_width=True)
-                    
-                # 交叉對帳
-                if not df_stmt.empty or not df_inv.empty:
-                    df_recon = pd.merge(df_stmt[['發票號碼', '總金額']], df_inv[['發票號碼', '總計']], on='發票號碼', how='outer').fillna(0.0)
-                    df_recon.columns = ['發票號碼', '對帳單總金額 (A)', '發票證明聯總計 (B)']
-                    df_recon['金額差異 (B-A)'] = df_recon['發票證明聯總計 (B)'] - df_recon['對帳單總金額 (A)']
-                    df_recon['核對結果狀態'] = df_recon['金額差異 (B-A)'].apply(lambda d: "✓ 金額完全一致" if abs(d) <= 1 else f"❌ 異常！金額不符 (差額 {d:g})")
-                    
-                    st.markdown("---")
-                    st.markdown("<h3 style='color: #2b5c8f;'>⚖️ 兩條線自動化交叉對帳結果 (全量主鍵比對)</h3>", unsafe_allow_html=True)
-                    st.dataframe(df_recon, use_container_width=True)
-                    
-                    bad_counts = df_recon['核對結果狀態'].str.contains("異常").sum()
-                    if bad_counts == 0 and not df_stmt.empty:
-                        st.balloons()
-                        st.success("🎉【對帳完美大通關】本月 42 張對帳單明細與電子發票全量交叉撞庫 100% 精準吻合！")
-            except Exception as e: 
+                with c1:
+                    st.markdown("#### 📊 1. 對帳單明細")
+                    st.dataframe(df_stmt, use_container_width=True, hide_index=True)
+                with c2:
+                    st.markdown("#### 📄 2. 電子發票證明聯明細")
+                    st.dataframe(df_inv, use_container_width=True, hide_index=True)
+
+                # ---- 交叉對帳（上色）----
+                st.markdown("---")
+                st.markdown("<h3 style='color: #2b5c8f;'>⚖️ 兩條線自動化交叉對帳結果</h3>", unsafe_allow_html=True)
+
+                def _hl(row):
+                    s = row["狀態"]
+                    color = ("#E2EFDA" if s.startswith("✓") else
+                             "#FFF2CC" if "缺值" in s else "#FCE4D6")
+                    return [f"background-color:{color}"] * len(row)
+                st.dataframe(df_recon.style.apply(_hl, axis=1), use_container_width=True, hide_index=True)
+
+                need = df_recon[df_recon["狀態"] != "✓ 一致"]
+                if len(need) == 0 and n_total > 0:
+                    st.balloons()
+                    st.success(f"🎉【對帳完美大通關】{n_total} 筆全量交叉撞庫 100% 精準吻合！")
+                elif len(need):
+                    st.warning(f"以下 {len(need)} 筆無法自動確認，請人工複檢：\n\n"
+                               + "、".join(need["發票號碼"].astype(str).tolist()))
+
+                if debug and log:
+                    with st.expander("🔧 除錯記錄（逐頁）"):
+                        st.code("\n".join(log))
+
+                # ---- 下載 xlsx ----
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine="openpyxl") as w:
+                    df_recon.to_excel(w, sheet_name="對帳結果", index=False)
+                    df_inv.to_excel(w, sheet_name="電子發票明細", index=False)
+                    df_stmt.to_excel(w, sheet_name="對帳單明細", index=False)
+                st.download_button("⬇️ 下載對帳結果 (xlsx)", buf.getvalue(),
+                                   file_name="正隆對帳結果.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True)
+            except Exception as e:
                 st.error(f"❌ 深度解析時發生非預期錯誤: {e}")
