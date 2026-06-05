@@ -1,10 +1,5 @@
 streamlit
 pandas
 numpy
-openpyxl
 gspread
 oauth2client
-pdf2image
-pillow
-paddlepaddle
-paddleocr
