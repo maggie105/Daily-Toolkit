@@ -68,8 +68,6 @@ with col2:
     st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
     st.markdown("<h3 style='color: #2b5c8f; margin-top:0;'>🧾 4. 正隆帳單自動化核對</h3>", unsafe_allow_html=True)
     st.write("雙階段核心審計系統。首階段無縫整合 LINE 對話叫貨紀錄回填雲端，次階段啟動 PDF 帳單全量交叉對帳。")
-    st.page_link("pages/4_🧾_正隆帳單核對.py", label="🚀 進入功能頁面", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 st.caption("✨ 目前版本: V4.1 (多頁面架構升級版) | 基於 Streamlit 原生多頁面路由驅動")
