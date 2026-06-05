@@ -97,6 +97,10 @@ def _get_ocr():
         from paddleocr import PaddleOCR
         _OCR = PaddleOCR(
             lang="chinese_cht",
+            # mobile 模型：體積小、速度快、記憶體低，雲端免費方案才跑得動；
+            # 對印刷體準確度通常與 server 相當。
+            text_detection_model_name="PP-OCRv5_mobile_det",
+            text_recognition_model_name="PP-OCRv5_mobile_rec",
             use_doc_orientation_classify=True,   # 自動轉正整頁（取代 Tesseract 的 OSD）
             use_doc_unwarping=False,
             use_textline_orientation=True,        # 修正翻轉的文字行
