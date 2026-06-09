@@ -131,22 +131,24 @@ if ctn_file is not None:
                 df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
                 
                 # ==================== 🛠️ 核心修正邏輯 ====================
-                # 遍歷展開後的每一列紀錄，精準將 G 欄數字轉為整數串接 "-1"，空值則保持完全空白 ""
+                # 1. 處理 H 欄：對應 =TEXT(G2,"0") & "-1" 的邏輯
                 col_h_values = []
                 for _, r in df_expanded.iterrows():
                     if not r['is_empty_g']:
                         try:
-                            # 先轉 float 再轉 int，完美消滅 351.0 這類浮點數小數點，並固定後綴 "-1"
+                            # 先轉 float 再轉 int，消滅 351.0 這類浮點數小數點，並固定串接 "-1"
                             val_str = str(int(float(r['col_G'])))
                             col_h_values.append(f"{val_str}-1")
                         except:
-                            # 萬一遇到無法轉換的特殊字串，則保留原樣串接 "-1"
                             g_str = str(r['col_G']).strip()
                             col_h_values.append(f"{g_str}-1" if g_str else "")
                     else:
                         col_h_values.append("") # 若原先 G 欄就是空白，H 欄也保持完全空白
                 
                 df_expanded['col_H'] = col_h_values
+                
+                # 2. 處理 I 欄：強制指定為空字串，確保 I2 欄位以下沒有任何內容
+                df_expanded['col_I'] = ""
                 # ==========================================================
                 
                 is_empty_list = df_expanded['is_empty_g'].tolist()
