@@ -118,7 +118,7 @@ if ctn_file is not None:
     if st.button("🚀 啟動貨櫃箱號自動產出", type="primary", use_container_width=True):
         with st.spinner("正在執行產出中..."):
             try:
-                # ─── 完全拷貝最原始的讀取邏輯 ───
+                # ─── 100% 恢復您本地原來的讀取與結構邏輯 ───
                 df = pd.read_excel(ctn_file, skiprows=4, header=None)
                 
                 header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
@@ -129,45 +129,46 @@ if ctn_file is not None:
 
                 # 過濾雜項
                 df = df[df['col_A'].notna()]
-                exclude_keywords = '合計|總計|CTN|SKU|品項|合計|總計|品項'
+                exclude_keywords = '合計|總計|CTN|SKU|品項'
                 df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
 
-                # 處理 G 欄空白標記（完全沿用原邏輯）
+                # 處理 G 欄（原始箱數）空白標記
                 df['is_empty_g'] = df['col_G'].isna()
                 df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
                 
-                # 依照 temp_g 倍增列（完全沿用原邏輯）
+                # 依照 temp_g（箱數）進行行數倍增展開
                 df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
 
-                # ─── 修正點：根據您的公式需求修正 H 欄結果，並強制清空 I 欄 ───
+                # ─── 核心修改點：對應您提供的期望圖 (image_609ea4) ───
+                # H 欄結果要是 =TEXT(G2,"0") & "-1" 的形式，每列都是 [箱數]-1 且固定不遞增
                 col_h_values = []
                 for _, r in df_expanded.iterrows():
                     if not r['is_empty_g'] and str(r['col_G']).strip() != "":
                         try:
-                            # 對應 =TEXT(G2,"0") & "-1" 邏輯，消滅 .0 浮點數並固定拼接 "-1"
-                            clean_barcode = str(int(float(r['col_G'])))
-                            col_h_values.append(f"{clean_barcode}-1")
+                            # 完美消除浮點數小數點（如 110.0 -> 110），並在尾端固定加上 "-1"
+                            clean_box_num = str(int(float(r['col_G'])))
+                            col_h_values.append(f"{clean_box_num}-1")
                         except:
-                            raw_barcode = str(r['col_G']).strip()
-                            col_h_values.append(f"{raw_barcode}-1" if raw_barcode else "")
+                            raw_box_num = str(r['col_G']).strip()
+                            col_h_values.append(f"{raw_box_num}-1" if raw_box_num else "")
                     else:
-                        col_h_values.append("") # 若原先 G 欄是空白，H 欄也保持空白
+                        col_h_values.append("") # 如果原本 G 欄為空，則 H 欄保持空白
                 
                 df_expanded['col_H'] = col_h_values
-                df_expanded['col_I'] = ""  # 確保 I2 欄位以下沒有任何內容
-                # ──────────────────────────────────────────────────────────
+                df_expanded['col_I'] = ""  # 強制將 I 欄內容清空，確保資料列中第二列以下完全無內容
+                # ───────────────────────────────────────────────────
 
-                # 先取出紅底判斷清單，再縮減欄位（完全沿用原邏輯）
+                # 先取出紅底判斷清單，再縮減欄位
                 is_empty_list = df_expanded['is_empty_g'].tolist()
                 
                 # 只取前 9 欄資料 (A 到 I)
                 output_df = df_expanded.iloc[:, :9].copy()
                 
-                # 賦予最終標題（完全沿用原邏輯）
+                # 賦予最終標題
                 final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
                 output_df.columns = final_headers
                 
-                # ─── 將寫入與樣式美化改為 Streamlit 的記憶體流模式 ───
+                # ─── 使用 openpyxl 進行記憶體模式建構與美化 ───
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "拆櫃明細"
@@ -186,14 +187,14 @@ if ctn_file is not None:
                     header_cell.alignment = center_align
                     header_cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
-                # 寫入資料列
+                # 寫入處理完後的資料列
                 for row_data in output_df.fillna("").values.tolist(): 
                     ws.append(row_data)
 
                 # 加入篩選器
                 ws.auto_filter.ref = f"A1:I{ws.max_row}"
 
-                # 處理資料列格式與紅底（完全沿用原邏輯迴圈結構）
+                # 處理資料列格式與紅底（依據 is_empty_list 判斷 G 欄原先是否為空）
                 for row_idx, is_empty in enumerate(is_empty_list, start=2):
                     for col_idx in range(1, 10):
                         cell = ws.cell(row=row_idx, column=col_idx)
@@ -203,7 +204,7 @@ if ctn_file is not None:
                         if is_empty:
                             cell.fill = red_fill
 
-                # 自動調整欄位寬度（完全沿用原邏輯）
+                # 自動調整欄位寬度（Big5 編碼字節計算長度）
                 for col in ws.columns:
                     max_length = 0
                     column = col[0].column_letter
@@ -217,7 +218,7 @@ if ctn_file is not None:
                         except: pass
                     ws.column_dimensions[column].width = max_length + 4
 
-                # 轉為二進位流供瀏覽器下載
+                # 輸出為二進位流供 Streamlit 網頁下載
                 excel_data = BytesIO()
                 wb.save(excel_data)
                 excel_data.seek(0)
