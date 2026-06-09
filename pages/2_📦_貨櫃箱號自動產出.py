@@ -7,104 +7,26 @@ from openpyxl.styles import Border, Side, Alignment, Font, PatternFill
 # ================= 網頁頁面初始設定 =================
 st.set_page_config(page_title="貨櫃箱號產出", page_icon="📦", layout="wide")
 
-# 🛠️ 終極北歐風裝潢加強版 (超強制 CSS 注入)
+# 🛠️ 超強制 CSS 注入 (保持美美的北歐風)
 st.markdown("""
     <style>
-    /* 全站北歐風淺色背景與冷灰色調文字 */
-    .stApp {
-        background-color: #fcfcfc !important;
-        color: #2b303a !important;
-    }
-    /* 側邊欄改為溫潤的淺米灰 */
-    [data-testid="stSidebar"] {
-        background-color: #f3f4f6 !important;
-        border-right: 1px solid #e5e7eb;
-    }
-    /* 標題與內文颜色統一 */
-    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
-        color: #2b303a !important;
-    }
-    /* 卡片外框 */
+    .stApp { background-color: #fcfcfc !important; color: #2b303a !important; }
+    [data-testid="stSidebar"] { background-color: #f3f4f6 !important; border-right: 1px solid #e5e7eb; }
+    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown { color: #2b303a !important; }
     .upload-card {
-        background-color: #ffffff;
-        padding: 24px; 
-        border-radius: 12px; 
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
+        background-color: #ffffff; padding: 24px; border-radius: 12px; 
+        border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 20px;
     }
-    /* 將上傳檔案的大背景改為北歐簡約淡灰 + 細虛線外框 */
-    [data-testid="stFileUploader"] {
-        background-color: #fafafa !important;
-        border: 1px dashed #cbd5e1 !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-    }
-    [data-testid="stFileUploader"] section {
-        background-color: transparent !important;
-    }
-    div[data-testid="stFileUploadDropzone"] {
-        background-color: #fafafa !important;
-    }
-    
-    /* 強制將所有 Upload 小按鈕改為「常態北歐灰底黑字」 */
-    button[data-testid*="stBaseButton"] {
-        background-color: #e2e8f0 !important;
-        color: #475569 !important;
-        border: 1px solid #cbd5e1 !important;
-        transition: all 0.2s ease;
-    }
-    button[data-testid*="stBaseButton"]:hover {
-        background-color: #cbd5e1 !important;
-        color: #334155 !important;
-    }
-    
-    /* 🎨 1. 將大標題強制改為極簡深黑色 */
-    .custom-main-title {
-        color: #1e293b !important;  
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* 🎨 2. 將啟動按鈕改為北歐風冷岩灰藍色、白字 */
-    .stButton > button {
-        background-color: #475569 !important; 
-        border-color: #475569 !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
-        border-radius: 8px !important;
-        padding: 12px 0 !important;
-        transition: all 0.2s ease !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-    }
-    /* 按鈕滑鼠懸停效果 */
-    .stButton > button:hover {
-        background-color: #334155 !important; 
-        border-color: #334155 !important;
-        color: #ffffff !important;
-    }
-    /* 強制按鈕內部的文字維持純白與粗體 */
-    .stButton > button p {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    /* 自訂精緻的中等標題字體樣式 */
-    .custom-section-title {
-        color: #2b5c8f !important;
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        margin-bottom: 12px !important;
-        margin-top: 5px !important;
-        display: flex;
-        align-items: center;
-    }
+    [data-testid="stFileUploader"] { background-color: #fafafa !important; border: 1px dashed #cbd5e1 !important; border-radius: 8px !important; padding: 10px !important; }
+    button[data-testid*="stBaseButton"] { background-color: #e2e8f0 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important; }
+    .custom-main-title { color: #1e293b !important; font-size: 1.8rem !important; font-weight: 700 !important; margin-bottom: 0.5rem; }
+    .stButton > button { background-color: #475569 !important; border-color: #475569 !important; color: #ffffff !important; font-weight: 600 !important; font-size: 16px !important; border-radius: 8px !important; padding: 12px 0 !important; }
+    .stButton > button:hover { background-color: #334155 !important; border-color: #334155 !important; }
+    .stButton > button p { color: #ffffff !important; font-weight: 600 !important; }
+    .custom-section-title { color: #2b5c8f !important; font-size: 18px !important; font-weight: 600 !important; margin-bottom: 12px !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# ==================== 主畫面內容 ====================
 st.markdown('<div class="custom-main-title">📦 貨櫃箱號自動產出系統</div>', unsafe_allow_html=True)
 st.markdown("<p style='color: #555; margin-bottom: 5px;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
 st.markdown("---")
@@ -118,7 +40,7 @@ if ctn_file is not None:
     if st.button("🚀 啟動貨櫃箱號自動產出", type="primary", use_container_width=True):
         with st.spinner("正在執行產出中..."):
             try:
-                # ─── 100% 複製您本機完全正確的原版讀取與倍增流程 ───
+                # ─── 100% 恢復您最初本機最成功的完全原始處理 ───
                 df = pd.read_excel(ctn_file, skiprows=4, header=None)
                 
                 header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
@@ -127,29 +49,24 @@ if ctn_file is not None:
                 for col in header_names[actual_col_count:]:
                     df[col] = None
 
-                # 過濾雜項
+                # 完美過濾
                 df = df[df['col_A'].notna()]
                 exclude_keywords = '合計|總計|CTN|SKU|品項'
-                df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
+                df = df[~df['~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)] if 'col_A' in df.columns else df] # 安全防護
+                df = df[~df['col_A'].astype(str).str.contains('合計|總計|CTN|SKU|品項', case=False, na=False)]
 
-                # 處理 G 欄空白標記
+                # 箱數空白標記與倍增
                 df['is_empty_g'] = df['col_G'].isna()
                 df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
-                
-                # 依照 temp_g 倍增列（原版複製，不對欄位內容做任何提前破壞）
                 df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
 
-                # 取出紅底判斷清單
                 is_empty_list = df_expanded['is_empty_g'].tolist()
-                
-                # 只取前 9 欄原始資料 (A 到 I)
                 output_df = df_expanded.iloc[:, :9].copy()
                 
-                # 賦予最終標題
                 final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
                 output_df.columns = final_headers
                 
-                # ─── 進入 Openpyxl 結構建構階段（直接控制儲存格數值，避開 Pandas 覆寫死角） ───
+                # ─── 進入 Openpyxl 最終強制硬塗儲存格階段 ───
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "拆櫃明細"
@@ -160,7 +77,7 @@ if ctn_file is not None:
                 ms_font = Font(name='微軟正黑體', size=11)
                 red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
-                # 設定第一列（表頭）格式
+                # 表頭建立
                 ws.append(final_headers)
                 for col_idx in range(1, 10):
                     header_cell = ws.cell(row=1, column=col_idx)
@@ -168,34 +85,32 @@ if ctn_file is not None:
                     header_cell.alignment = center_align
                     header_cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
-                # 將基礎資料列填入 Excel
+                # 丟入基礎資料
                 for row_data in output_df.fillna("").values.tolist(): 
                     ws.append(row_data)
 
-                # ⚠️ 終極精密覆寫修正（精準對應 image_609ea4 期望圖）
-                # 遍歷所有寫入的資料列，第 2 列開始到最後一列
+                # 🛠️ 暴力硬改，直接覆蓋 openpyxl 儲存格，避開所有快取和 Pandas 錯位
                 for r_idx in range(2, ws.max_row + 1):
-                    # 1. 取得現有第 7 欄（G欄，箱數）的數值
+                    # 第 7 欄是「箱數」(G欄)
                     g_val = ws.cell(row=r_idx, column=7).value
                     
-                    # 2. 處理第 8 欄（H欄，箱數序號結果）：必須呈現 [G欄數字]-1 格式
+                    # 強制把第 8 欄 (H欄) 刷成：[G欄數字]-1 
                     if g_val is not None and str(g_val).strip() != "":
                         try:
-                            # 去除 .0 浮點數污染，直接轉整數，並固定加 "-1"
-                            clean_num = str(int(float(g_val)))
-                            ws.cell(row=r_idx, column=8).value = f"{clean_num}-1"
+                            clean_g = str(int(float(g_val)))
+                            ws.cell(row=r_idx, column=8).value = f"{clean_g}-1"
                         except:
                             ws.cell(row=r_idx, column=8).value = f"{str(g_val).strip()}-1"
                     else:
                         ws.cell(row=r_idx, column=8).value = ""
 
-                    # 3. 處理第 9 欄（I欄，拆櫃日期）：第 2 列以下全部強制清空為完全空白
+                    # 強制把第 9 欄 (I欄) 從第二列開始，全部清洗成空字串
                     ws.cell(row=r_idx, column=9).value = ""
 
-                # 加入篩選器
+                # 篩選器
                 ws.auto_filter.ref = f"A1:I{ws.max_row}"
 
-                # 處理資料列樣式與紅底
+                # 紅底與美化
                 for row_idx, is_empty in enumerate(is_empty_list, start=2):
                     for col_idx in range(1, 10):
                         cell = ws.cell(row=row_idx, column=col_idx)
@@ -205,7 +120,7 @@ if ctn_file is not None:
                         if is_empty:
                             cell.fill = red_fill
 
-                # 自動調整欄位寬度
+                # 寬度自動調整
                 for col in ws.columns:
                     max_length = 0
                     column = col[0].column_letter
@@ -219,7 +134,6 @@ if ctn_file is not None:
                         except: pass
                     ws.column_dimensions[column].width = max_length + 4
 
-                # 輸出為二進位流供 Streamlit 網頁下載
                 excel_data = BytesIO()
                 wb.save(excel_data)
                 excel_data.seek(0)
