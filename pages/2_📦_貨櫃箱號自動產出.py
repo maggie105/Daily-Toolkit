@@ -52,8 +52,7 @@ if ctn_file is not None:
                 # 完美過濾
                 df = df[df['col_A'].notna()]
                 exclude_keywords = '合計|總計|CTN|SKU|品項'
-                df = df[~df['~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)] if 'col_A' in df.columns else df] # 安全防護
-                df = df[~df['col_A'].astype(str).str.contains('合計|總計|CTN|SKU|品項', case=False, na=False)]
+                df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
 
                 # 箱數空白標記與倍增
                 df['is_empty_g'] = df['col_G'].isna()
@@ -89,9 +88,9 @@ if ctn_file is not None:
                 for row_data in output_df.fillna("").values.tolist(): 
                     ws.append(row_data)
 
-                # 🛠️ 暴力硬改，直接覆蓋 openpyxl 儲存格，避開所有快取和 Pandas 錯位
+                # 🛠️ 直接覆蓋 openpyxl 儲存格（修正了先前版本破壞 DataFrame 結構的盲點）
                 for r_idx in range(2, ws.max_row + 1):
-                    # 第 7 欄是「箱數」(G欄)
+                    # 第 7 欄是原始的「箱數」(G欄)
                     g_val = ws.cell(row=r_idx, column=7).value
                     
                     # 強制把第 8 欄 (H欄) 刷成：[G欄數字]-1 
