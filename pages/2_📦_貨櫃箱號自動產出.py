@@ -49,7 +49,7 @@ if ctn_file is not None:
                 for col in header_names[actual_col_count:]:
                     df[col] = None
 
-                # 完美過濾
+                # 完美過濾 (已修正上個版本多出重複變數的語法錯誤)
                 df = df[df['col_A'].notna()]
                 exclude_keywords = '合計|總計|CTN|SKU|品項'
                 df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
@@ -88,7 +88,7 @@ if ctn_file is not None:
                 for row_data in output_df.fillna("").values.tolist(): 
                     ws.append(row_data)
 
-                # 🛠️ 直接覆蓋 openpyxl 儲存格（修正了先前版本破壞 DataFrame 結構的盲點）
+                # 🛠️ 暴力硬改：直接對儲存格賦值，修正 Pandas 錯位與平台快取問題
                 for r_idx in range(2, ws.max_row + 1):
                     # 第 7 欄是原始的「箱數」(G欄)
                     g_val = ws.cell(row=r_idx, column=7).value
