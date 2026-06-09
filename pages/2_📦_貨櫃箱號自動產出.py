@@ -27,8 +27,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="custom-main-title">📦 貨櫃箱號自動產出系統</div>', unsafe_allow_html=True)
-st.markdown("<p style='color: #555; margin-bottom: 5px;'>請上傳原始拆櫃 Excel 報表，系統會全自動依箱數進行列數倍增、產出 H 欄序號，並將 G 欄空白者全自動塗上紅底標記。</p>", unsafe_allow_html=True)
+st.markdown('<div class="custom-main-title">📦 貨櫃箱號自動產出系統 (精密除錯版)</div>', unsafe_allow_html=True)
+st.markdown("<p style='color: #555; margin-bottom: 5px;'>系統會自動依箱數進行列數倍增、產出 H 欄序號，並在下方即時顯示資料處理 Log。</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 st.markdown('<div class="upload-card">', unsafe_allow_html=True)
@@ -38,34 +38,68 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 if ctn_file is not None:
     if st.button("🚀 啟動貨櫃箱號自動產出", type="primary", use_container_width=True):
+        
+        # 建立一個除錯日誌容器，呈現在前台
+        log_container = st.container()
+        with log_container:
+            st.info("🔍 [LOG] 開始解析上傳檔案...")
+            
         with st.spinner("正在執行產出中..."):
             try:
-                # ─── 100% 恢復您最初本機最成功的完全原始處理 ───
+                # 1. 讀取原始檔案 (跳過前 4 行，不設定表頭名稱，直接用數字 0~8 索引，防止兩個「箱數」衝突)
                 df = pd.read_excel(ctn_file, skiprows=4, header=None)
                 
-                header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
-                actual_col_count = len(df.columns)
-                df.columns = header_names[:actual_col_count]
-                for col in header_names[actual_col_count:]:
-                    df[col] = None
-
-                # 完美過濾 (已修正上個版本多出重複變數的語法錯誤)
-                df = df[df['col_A'].notna()]
+                # 保證至少有 9 欄
+                for i in range(df.shape[1], 9):
+                    df[i] = None
+                    
+                # 只取前 9 欄
+                df = df.iloc[:, :9]
+                
+                # 過濾雜項 (0 代表第一欄 col_A)
+                df = df[df[0].notna()]
                 exclude_keywords = '合計|總計|CTN|SKU|品項'
-                df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
+                df = df[~df[0].astype(str).str.contains(exclude_keywords, case=False, na=False)]
 
-                # 箱數空白標記與倍增
-                df['is_empty_g'] = df['col_G'].isna()
-                df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
+                with log_container:
+                    st.write("📋 [LOG] 原始資料過濾完成，前 3 筆的 G 欄 (索引6) 箱數內容為：")
+                    st.code(df[[0, 1, 6]].head(3).to_string())
+
+                # 2. 處理 G 欄 (索引 6) 是否為空以及轉換為數字
+                df['is_empty_g'] = df[6].isna()
+                df['temp_g'] = pd.to_numeric(df[6], errors='coerce').fillna(1).astype(int)
+                
+                # 3. 執行倍增展開
                 df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
 
+                with log_container:
+                    st.write(f"📈 [LOG] 資料展開完成！列數從 {len(df)} 列倍增至 {len(df_expanded)} 列。")
+
+                # 4. 生成傳統的「10箱-1, 10箱-2」邏輯（完全回歸你本機版成功的邏輯）
+                def generate_h_native(row, group_count):
+                    if row['is_empty_g']:
+                        return ""
+                    return f"{int(row[6])}箱-{group_count + 1}"
+
+                df_expanded[7] = [
+                    generate_h_native(row, count) 
+                    for row, count in zip(df_expanded.to_dict('records'), df_expanded.groupby(level=0).cumcount())
+                ]
+                
+                # 5. 強制清空第 9 欄 (索引 8，拆櫃日期)
+                df_expanded[8] = ""
+                
+                # 記錄紅底清單
                 is_empty_list = df_expanded['is_empty_g'].tolist()
-                output_df = df_expanded.iloc[:, :9].copy()
                 
-                final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
-                output_df.columns = final_headers
+                # 取出最終準備寫入 Excel 的資料
+                final_data_df = df_expanded[[0, 1, 2, 3, 4, 5, 6, 7, 8]].copy()
                 
-                # ─── 進入 Openpyxl 最終強制硬塗儲存格階段 ───
+                with log_container:
+                    st.write("🎯 [LOG] H 欄序號計算完畢，即時預覽產出結果前 5 筆：")
+                    st.code(final_data_df.head(5).to_string())
+
+                # ─── 進入 Openpyxl 導出與美化 ───
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "拆櫃明細"
@@ -76,40 +110,24 @@ if ctn_file is not None:
                 ms_font = Font(name='微軟正黑體', size=11)
                 red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
-                # 表頭建立
+                # 寫入最終期望的標題 (包含兩個一模一樣的「箱數」)
+                final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
                 ws.append(final_headers)
+                
                 for col_idx in range(1, 10):
                     header_cell = ws.cell(row=1, column=col_idx)
                     header_cell.border = full_border
                     header_cell.alignment = center_align
                     header_cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
-                # 丟入基礎資料
-                for row_data in output_df.fillna("").values.tolist(): 
+                # 寫入過濾並計算後的每行資料
+                for row_data in final_data_df.fillna("").values.tolist(): 
                     ws.append(row_data)
 
-                # 🛠️ 暴力硬改：直接對儲存格賦值，修正 Pandas 錯位與平台快取問題
-                for r_idx in range(2, ws.max_row + 1):
-                    # 第 7 欄是原始的「箱數」(G欄)
-                    g_val = ws.cell(row=r_idx, column=7).value
-                    
-                    # 強制把第 8 欄 (H欄) 刷成：[G欄數字]-1 
-                    if g_val is not None and str(g_val).strip() != "":
-                        try:
-                            clean_g = str(int(float(g_val)))
-                            ws.cell(row=r_idx, column=8).value = f"{clean_g}-1"
-                        except:
-                            ws.cell(row=r_idx, column=8).value = f"{str(g_val).strip()}-1"
-                    else:
-                        ws.cell(row=r_idx, column=8).value = ""
-
-                    # 強制把第 9 欄 (I欄) 從第二列開始，全部清洗成空字串
-                    ws.cell(row=r_idx, column=9).value = ""
-
-                # 篩選器
+                # 加入篩選器
                 ws.auto_filter.ref = f"A1:I{ws.max_row}"
 
-                # 紅底與美化
+                # 刷入紅底與邊框格式
                 for row_idx, is_empty in enumerate(is_empty_list, start=2):
                     for col_idx in range(1, 10):
                         cell = ws.cell(row=row_idx, column=col_idx)
@@ -119,7 +137,7 @@ if ctn_file is not None:
                         if is_empty:
                             cell.fill = red_fill
 
-                # 寬度自動調整
+                # 自動調整欄位寬度
                 for col in ws.columns:
                     max_length = 0
                     column = col[0].column_letter
@@ -133,11 +151,14 @@ if ctn_file is not None:
                         except: pass
                     ws.column_dimensions[column].width = max_length + 4
 
+                # 轉為二進位流供瀏覽器下載
                 excel_data = BytesIO()
                 wb.save(excel_data)
                 excel_data.seek(0)
                 
-                st.success("✨ 貨櫃箱號整理&產出完畢！請點擊下方按鈕下載成果：")
+                with log_container:
+                    st.success("🎉 [SUCCESS] 檔案成功產生完畢，未發生任何異常！")
+                    
                 st.download_button(
                     label="📥 點此一鍵下載全新拆櫃 Excel 檔案", 
                     data=excel_data, 
@@ -146,4 +167,4 @@ if ctn_file is not None:
                     use_container_width=True
                 )
             except Exception as e: 
-                st.error(f"❌ 錯誤: {e}")
+                st.error(f"❌ 執行中發生未預期錯誤: {e}")
