@@ -118,79 +118,106 @@ if ctn_file is not None:
     if st.button("🚀 啟動貨櫃箱號自動產出", type="primary", use_container_width=True):
         with st.spinner("正在執行產出中..."):
             try:
+                # ─── 完全拷貝最原始的讀取邏輯 ───
                 df = pd.read_excel(ctn_file, skiprows=4, header=None)
+                
                 header_names = ['col_A', 'col_B', 'col_C', 'col_D', 'col_E', 'col_F', 'col_G', 'col_H', 'col_I']
-                df.columns = header_names[:len(df.columns)]
+                actual_col_count = len(df.columns)
+                df.columns = header_names[:actual_col_count]
+                for col in header_names[actual_col_count:]:
+                    df[col] = None
+
+                # 過濾雜項
                 df = df[df['col_A'].notna()]
-                df = df[~df['col_A'].astype(str).str.contains('合计|总计|CTN|SKU|品项|合計|總計|品項', case=False, na=False)]
-                
-                # 判斷 G 欄（品項條碼）是否為空
+                exclude_keywords = '合計|總計|CTN|SKU|品項|合計|總計|品項'
+                df = df[~df['col_A'].astype(str).str.contains(exclude_keywords, case=False, na=False)]
+
+                # 處理 G 欄空白標記（完全沿用原邏輯）
                 df['is_empty_g'] = df['col_G'].isna()
-                
-                # 原有的倍增展開邏輯維持不變（此處預設依據原程式碼邏輯）
                 df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
-                df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
                 
-                # ==================== 🛠️ 100% 精準修正後的欄位對應 ====================
+                # 依照 temp_g 倍增列（完全沿用原邏輯）
+                df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
+
+                # ─── 修正點：根據您的公式需求修正 H 欄結果，並強制清空 I 欄 ───
                 col_h_values = []
                 for _, r in df_expanded.iterrows():
-                    # 抓取 G 欄（品項條碼）作為基礎進行拼接
                     if not r['is_empty_g'] and str(r['col_G']).strip() != "":
                         try:
-                            # 完美消除浮點數小數點（如 351.0 -> 351），並在尾端加上 "-1"
-                            barcode_clean = str(int(float(r['col_G'])))
-                            col_h_values.append(f"{barcode_clean}-1")
+                            # 對應 =TEXT(G2,"0") & "-1" 邏輯，消滅 .0 浮點數並固定拼接 "-1"
+                            clean_barcode = str(int(float(r['col_G'])))
+                            col_h_values.append(f"{clean_barcode}-1")
                         except:
-                            # 萬一條碼是特殊字串，則保留原始字串並加上 "-1"
-                            barcode_raw = str(r['col_G']).strip()
-                            col_h_values.append(f"{barcode_raw}-1" if barcode_raw else "")
+                            raw_barcode = str(r['col_G']).strip()
+                            col_h_values.append(f"{raw_barcode}-1" if raw_barcode else "")
                     else:
-                        col_h_values.append("") # 如果 G 欄（品項條碼）本來就空白，H 欄就保持乾淨完全空白
+                        col_h_values.append("") # 若原先 G 欄是空白，H 欄也保持空白
                 
-                # 正確覆寫到 H 欄（叫貨數量）
                 df_expanded['col_H'] = col_h_values
-                
-                # 強制清空 I 欄（箱數），確保 I2 以下沒有任何內容
-                df_expanded['col_I'] = ""
-                # ==========================================================
-                
+                df_expanded['col_I'] = ""  # 確保 I2 欄位以下沒有任何內容
+                # ──────────────────────────────────────────────────────────
+
+                # 先取出紅底判斷清單，再縮減欄位（完全沿用原邏輯）
                 is_empty_list = df_expanded['is_empty_g'].tolist()
+                
+                # 只取前 9 欄資料 (A 到 I)
                 output_df = df_expanded.iloc[:, :9].copy()
+                
+                # 賦予最終標題（完全沿用原邏輯）
                 final_headers = ['商品編號', '商品名稱', '樣式', '品項條碼', '廠商批價', '叫貨數量', '箱數', '箱數', '拆櫃日期']
                 output_df.columns = final_headers
-
+                
+                # ─── 將寫入與樣式美化改為 Streamlit 的記憶體流模式 ───
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "拆櫃明細"
-                thin = Side(border_style="thin", color="000000")
-                full_border = Border(top=thin, left=thin, right=thin, bottom=thin)
+
+                thin_side = Side(border_style="thin", color="000000")
+                full_border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
                 center_align = Alignment(horizontal='center', vertical='center')
+                ms_font = Font(name='微軟正黑體', size=11)
                 red_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
 
+                # 設定第一列（表頭）格式
                 ws.append(final_headers)
-                for idx in range(1, 10):
-                    cell = ws.cell(row=1, column=idx)
-                    cell.border = full_border
-                    cell.alignment = center_align
-                    cell.font = Font(name='微軟正黑體', size=11, bold=True)
+                for col_idx in range(1, 10):
+                    header_cell = ws.cell(row=1, column=col_idx)
+                    header_cell.border = full_border
+                    header_cell.alignment = center_align
+                    header_cell.font = Font(name='微軟正黑體', size=11, bold=True)
 
+                # 寫入資料列
                 for row_data in output_df.fillna("").values.tolist(): 
                     ws.append(row_data)
+
+                # 加入篩選器
                 ws.auto_filter.ref = f"A1:I{ws.max_row}"
 
-                for r_idx, is_empty in enumerate(is_empty_list, start=2):
-                    for c_idx in range(1, 10):
-                        cell = ws.cell(row=r_idx, column=c_idx)
+                # 處理資料列格式與紅底（完全沿用原邏輯迴圈結構）
+                for row_idx, is_empty in enumerate(is_empty_list, start=2):
+                    for col_idx in range(1, 10):
+                        cell = ws.cell(row=row_idx, column=col_idx)
                         cell.border = full_border
                         cell.alignment = center_align
-                        cell.font = Font(name='微軟正黑體', size=11)
-                        if is_empty: 
+                        cell.font = ms_font
+                        if is_empty:
                             cell.fill = red_fill
 
+                # 自動調整欄位寬度（完全沿用原邏輯）
                 for col in ws.columns:
-                    max_len = max(len(str(cell.value or '')) for cell in col)
-                    ws.column_dimensions[col[0].column_letter].width = max_len + 5
+                    max_length = 0
+                    column = col[0].column_letter
+                    for cell in col:
+                        try:
+                            if cell.value:
+                                val_str = str(cell.value)
+                                byte_len = len(val_str.encode('big5')) if val_str else 0
+                                if byte_len > max_length:
+                                    max_length = byte_len
+                        except: pass
+                    ws.column_dimensions[column].width = max_length + 4
 
+                # 轉為二進位流供瀏覽器下載
                 excel_data = BytesIO()
                 wb.save(excel_data)
                 excel_data.seek(0)
