@@ -130,7 +130,24 @@ if ctn_file is not None:
                 df['temp_g'] = pd.to_numeric(df['col_G'], errors='coerce').fillna(1).astype(int)
                 df_expanded = df.loc[df.index.repeat(df['temp_g'])].copy()
                 
-                df_expanded['col_H'] = [f"{int(r['col_G'])}箱-{c+1}" if not r['is_empty_g'] else "" for r, c in zip(df_expanded.to_dict('records'), df_expanded.groupby(level=0).cumcount())]
+                # ==================== 🛠️ 核心修正邏輯 ====================
+                # 遍歷展開後的每一列紀錄，精準將 G 欄數字轉為整數串接 "-1"，空值則保持完全空白 ""
+                col_h_values = []
+                for _, r in df_expanded.iterrows():
+                    if not r['is_empty_g']:
+                        try:
+                            # 先轉 float 再轉 int，完美消滅 351.0 這類浮點數小數點，並固定後綴 "-1"
+                            val_str = str(int(float(r['col_G'])))
+                            col_h_values.append(f"{val_str}-1")
+                        except:
+                            # 萬一遇到無法轉換的特殊字串，則保留原樣串接 "-1"
+                            g_str = str(r['col_G']).strip()
+                            col_h_values.append(f"{g_str}-1" if g_str else "")
+                    else:
+                        col_h_values.append("") # 若原先 G 欄就是空白，H 欄也保持完全空白
+                
+                df_expanded['col_H'] = col_h_values
+                # ==========================================================
                 
                 is_empty_list = df_expanded['is_empty_g'].tolist()
                 output_df = df_expanded.iloc[:, :9].copy()
