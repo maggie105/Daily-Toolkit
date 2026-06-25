@@ -289,7 +289,7 @@ with col1:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
     uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-    uploaded_files_onl = st.file_uploader("② 請上傳「Online_products*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
+    uploaded_files_onl = st.file_uploader("② 請上傳「其他店鋪」的檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with col2:
