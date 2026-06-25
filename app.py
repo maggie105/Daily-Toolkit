@@ -38,7 +38,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==================== 主頁面視覺 (極簡儀表板) ====================
-st.markdown("<h1 style='color: #2b5c8f; font-weight: 700;'>🔧 Daily Toolkit 每日工具包</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='color: #2b5c8f; font-weight: 700;'>🔧 Daily Toolkit 工具包</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color: #666666; font-size: 1.1rem;'>歡迎回來！請點選左側導覽列，或透過下方快速跳轉入口來啟動您所需的自動化工具。</p>", unsafe_allow_html=True)
 st.markdown("---")
 
