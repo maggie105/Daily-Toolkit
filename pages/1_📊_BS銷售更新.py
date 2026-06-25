@@ -276,7 +276,7 @@ def post_process_steps():
 # 🎯 套用自訂深黑標題類別
 st.markdown('<div class="custom-main-title">📊 BigSeller 銷售數據更新系統</div>', unsafe_allow_html=True)
 st.markdown("""
-    <p style='color: #555; margin-bottom: 5px;'>對應本地 01 至 04 資料夾。請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
+    <p style='color: #555; margin-bottom: 5px;'>請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
     <p style='margin-top: 0;'>👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
 """, unsafe_allow_html=True)
 st.markdown("---")
