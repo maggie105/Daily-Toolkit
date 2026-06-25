@@ -107,7 +107,7 @@ st.markdown("""
 # ==================== 主畫面內容 ====================
 # 🎯 套用自訂深黑標題類別
 st.markdown('<div class="custom-main-title">🏷️ 庫存資料與一維條碼整合系統</div>', unsafe_allow_html=True)
-st.markdown("<p style='color: #555; margin-bottom: 5px;'>對應原 VBA 巨集。請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #555; margin-bottom: 5px;'>請同時投入三份對應報表，系統會全自動跨表關聯、智能取消合併儲存格並向下填補、自動篩選清除中文字儲位，並針對「庫存減銷售小於等於 0」的列自動刷黃底標記！</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 col1, col2, col3 = st.columns(3, gap="medium")
