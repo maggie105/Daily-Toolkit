@@ -27,7 +27,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="custom-main-title">📦 貨櫃箱號自動產出系統 (精密除錯版)</div>', unsafe_allow_html=True)
+st.markdown('<div class="custom-main-title">📦 貨櫃箱號自動產出系統</div>', unsafe_allow_html=True)
 st.markdown("<p style='color: #555; margin-bottom: 5px;'>系統會自動依箱數進行列數倍增、產出 H 欄序號，並在下方即時顯示資料處理 Log。</p>", unsafe_allow_html=True)
 st.markdown("---")
 
