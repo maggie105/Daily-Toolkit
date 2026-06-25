@@ -4,7 +4,7 @@ import io
 
 st.set_page_config(page_title="BS採購建議整合", page_icon="📦", layout="centered")
 
-st.title("📦 BS採購建議整合")
+st.title("📋 BS採購建議整合")
 st.caption("上傳原始採購建議檔案，自動整合輸出")
 
 KEEP_COLS = [
