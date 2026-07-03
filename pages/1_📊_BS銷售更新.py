@@ -169,7 +169,8 @@ def get_worksheet_by_gid(sh, gid):
         if str(sheet.id) == str(gid):
             return sheet
     return None
-    def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
+
+def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
     """
     自動重試機制:遇到暫時性的 API 錯誤(503服務不可用、429太多請求)時，
     會自動等待後重試，最多重試 max_retries 次。
@@ -244,7 +245,7 @@ def upload_to_google_sheets(df, task_key, title_list=None):
         worksheet = get_worksheet_by_gid(sh, SHEET_CONFIGS[task_key]["gid"])
         if not worksheet: return
             
-end_col = SHEET_CONFIGS[task_key]["end_col"]
+        end_col = SHEET_CONFIGS[task_key]["end_col"]
         retry_on_api_error(worksheet.batch_clear, [f"A:{end_col}"])
         
         data_to_upload = []
