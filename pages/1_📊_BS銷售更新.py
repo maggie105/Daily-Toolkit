@@ -7,6 +7,7 @@ import warnings
 import re
 import json
 from oauth2client.service_account import ServiceAccountCredentials
+from gspread.exceptions import APIError
 
 # 1. 隱藏 openpyxl 的格式警告
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -168,6 +169,23 @@ def get_worksheet_by_gid(sh, gid):
         if str(sheet.id) == str(gid):
             return sheet
     return None
+    def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
+    """
+    自動重試機制:遇到暫時性的 API 錯誤(503服務不可用、429太多請求)時，
+    會自動等待後重試，最多重試 max_retries 次。
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            error_str = str(e)
+            is_temporary = "503" in error_str or "429" in error_str or "500" in error_str
+            if is_temporary and attempt < max_retries:
+                st.toast(f"⏳ 雲端服務暫時忙碌，{delay}秒後自動重試 ({attempt}/{max_retries})...")
+                time.sleep(delay)
+                continue
+            else:
+                raise
 
 def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header_row=0):
     try:
@@ -226,8 +244,8 @@ def upload_to_google_sheets(df, task_key, title_list=None):
         worksheet = get_worksheet_by_gid(sh, SHEET_CONFIGS[task_key]["gid"])
         if not worksheet: return
             
-        end_col = SHEET_CONFIGS[task_key]["end_col"]
-        worksheet.batch_clear([f"A:{end_col}"])
+end_col = SHEET_CONFIGS[task_key]["end_col"]
+        retry_on_api_error(worksheet.batch_clear, [f"A:{end_col}"])
         
         data_to_upload = []
         if title_list:
@@ -240,7 +258,7 @@ def upload_to_google_sheets(df, task_key, title_list=None):
         for row in clean_df.values.tolist():
             data_to_upload.append([("" if pd.isna(cell) else cell) for cell in row])
         
-        worksheet.update(values=data_to_upload, range_name='A1')
+        retry_on_api_error(worksheet.update, values=data_to_upload, range_name='A1')
         st.write(f"🟢 {worksheet.title} 數據已成功同步。")
     except Exception as e:
         st.error(f"❌ 雲端同步失敗 (Task {task_key})。錯誤: {e}")
@@ -254,20 +272,20 @@ def post_process_steps():
         sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
         if not sheet_source or not sheet_target: return
 
-        raw_date_text = sheet_source.acell('B1').value 
+        raw_date_text = retry_on_api_error(sheet_source.acell, 'B1').value 
         found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
         if len(found_dates) >= 2:
             d1 = found_dates[0].replace("-", "")[4:]
             d2 = found_dates[1].replace("-", "")[4:]
             final_date_str = f"{d1}-{d2}"
-            sheet_target.update(values=[[final_date_str]], range_name='B1')
+            retry_on_api_error(sheet_target.update, values=[[final_date_str]], range_name='B1')
             st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
 
-        v_values = sheet_source.col_values(22)[4:] 
+        v_values = retry_on_api_error(sheet_source.col_values, 22)[4:] 
         filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
-        sheet_target.batch_clear(["A3:A"]) 
+        retry_on_api_error(sheet_target.batch_clear, ["A3:A"]) 
         if filtered_v:
-            sheet_target.update(values=filtered_v, range_name='A3')
+            retry_on_api_error(sheet_target.update, values=filtered_v, range_name='A3')
             st.write("🏷️ 雲端 A 欄品項條碼二次同步成功。")
     except Exception as e:
         st.error(f"❌ 後處理二次同步出錯: {e}")
