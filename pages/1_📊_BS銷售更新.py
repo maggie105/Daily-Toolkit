@@ -227,7 +227,7 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
         else:
             df["商品平均价格"] = 0
 
-    # 補齊新版可能未提供的舊版欄位
+    # 補齊新版經營分析可能未提供的舊版欄位
     if "有效商品销售额" not in df.columns and "商品销售额" in df.columns:
         df["有效商品销售额"] = df["商品销售额"]
     if "有效商品销量" not in df.columns and "商品销量" in df.columns:
@@ -321,30 +321,47 @@ def post_process_steps():
         client = get_gspread_client()
         if not client: return
         sh = client.open_by_key(SPREADSHEET_ID)
-        sheet_source = get_worksheet_by_gid(sh, SHEET_CONFIGS["03"]["gid"])
+        sheet_source_03 = get_worksheet_by_gid(sh, SHEET_CONFIGS["03"]["gid"])
+        sheet_source_04 = get_worksheet_by_gid(sh, SHEET_CONFIGS["04"]["gid"])
         sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
-        if not sheet_source or not sheet_target: return
+        if not sheet_target: return
 
-        # 日期解析：若來源表 A1/B1 有日期字串則解析；否則帶入當前月日日期
-        raw_date_text = retry_on_api_error(sheet_source.acell, 'B1').value 
-        found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
-        if len(found_dates) >= 2:
-            d1 = found_dates[0].replace("-", "")[4:]
-            d2 = found_dates[1].replace("-", "")[4:]
-            final_date_str = f"{d1}-{d2}"
-        else:
+        final_date_str = None
+
+        # 1. 優先嘗試從 03 (銷量報告) 的 B1 抓取日期
+        if sheet_source_03:
+            raw_date_text_03 = retry_on_api_error(sheet_source_03.acell, 'B1').value
+            found_dates_03 = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text_03))
+            if len(found_dates_03) >= 2:
+                d1 = found_dates_03[0].replace("-", "")[4:]
+                d2 = found_dates_03[1].replace("-", "")[4:]
+                final_date_str = f"{d1}-{d2}"
+
+        # 2. 若 03 抓不到 (上傳新版經營分析時)，自動改從 04 (利潤報告) 的 B1 擷取日期
+        if not final_date_str and sheet_source_04:
+            raw_date_text_04 = retry_on_api_error(sheet_source_04.acell, 'B1').value
+            found_dates_04 = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text_04))
+            if len(found_dates_04) >= 2:
+                d1 = found_dates_04[0].replace("-", "")[4:]
+                d2 = found_dates_04[1].replace("-", "")[4:]
+                final_date_str = f"{d1}-{d2}"
+
+        # 3. 若皆未抓到，才使用當前月日標示
+        if not final_date_str:
             today_str = datetime.date.today().strftime("%m%d")
             final_date_str = f"更新-{today_str}"
 
         retry_on_api_error(sheet_target.update, values=[[final_date_str]], range_name='B1')
         st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
 
-        v_values = retry_on_api_error(sheet_source.col_values, 22)[4:] 
-        filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
-        retry_on_api_error(sheet_target.batch_clear, ["A3:A"]) 
-        if filtered_v:
-            retry_on_api_error(sheet_target.update, values=filtered_v, range_name='A3')
-            st.write("🏷️ 雲端 A 欄品項條碼二次同步成功。")
+        # 同步 A 欄條碼
+        if sheet_source_03:
+            v_values = retry_on_api_error(sheet_source_03.col_values, 22)[4:] 
+            filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
+            retry_on_api_error(sheet_target.batch_clear, ["A3:A"]) 
+            if filtered_v:
+                retry_on_api_error(sheet_target.update, values=filtered_v, range_name='A3')
+                st.write("🏷️ 雲端 A 欄品項條碼二次同步成功。")
     except Exception as e:
         st.error(f"❌ 後處理二次同步出錯: {e}")
 
