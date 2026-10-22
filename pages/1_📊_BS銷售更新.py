@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import time
+import datetime
 import gspread
 import warnings
 import re
@@ -190,11 +191,50 @@ def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
 
 def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header_row=0):
     try:
+        # 1. 自動判斷表頭行數：若第一行包含「产品名称」或「店铺SKU编号」代表是新版經營分析報告 (header=0)
+        preview_df = pd.read_excel(uploaded_file, nrows=2, header=None)
+        if preview_df.shape[0] > 0 and any("产品名称" in str(x) or "店铺SKU编号" in str(x) for x in preview_df.iloc[0].values):
+            header_row = 0
+        elif task_key in ["03", "04"] and header_row == 0:
+            # 舊版 03/04 銷量/利潤報表表頭在第 2 行 (header=1)
+            header_row = 1
+            
         df = pd.read_excel(uploaded_file, header=header_row)
     except Exception as e:
         st.error(f"❌ 無法讀取檔案 `{uploaded_file.name}`。錯誤資訊: {e}")
         return None
-        
+
+    # 2. 💡【新舊版欄位自動對齊轉換】
+    rename_dict = {
+        "产品名称": "商品名称",
+        "店铺名称": "店铺",
+        "店铺SKU编号": "商品SKU",
+        "产品销售额": "商品销售额",
+        "产品销量": "商品销量",
+        "商品均价": "商品平均价格",
+        "商品均價": "商品平均价格",
+        "取消订单量": "取消訂單數",
+        "退款订单量": "退款訂單數"
+    }
+    df = df.rename(columns=rename_dict)
+
+    # 3. 💡【自動補齊平均價格與缺少的數值欄位】
+    if "商品平均价格" not in df.columns:
+        if "商品销售额" in df.columns and "商品销量" in df.columns:
+            sales = pd.to_numeric(df["商品销售额"].astype(str).str.replace(",", "").str.strip(), errors='coerce').fillna(0)
+            qty = pd.to_numeric(df["商品销量"].astype(str).str.replace(",", "").str.strip(), errors='coerce').fillna(0)
+            df["商品平均价格"] = (sales / qty.replace(0, 1)).round(2)
+        else:
+            df["商品平均价格"] = 0
+
+    # 補齊新版可能未提供的舊版欄位
+    if "有效商品销售额" not in df.columns and "商品销售额" in df.columns:
+        df["有效商品销售额"] = df["商品销售额"]
+    if "有效商品销量" not in df.columns and "商品销量" in df.columns:
+        df["有效商品销量"] = df["商品销量"]
+    if "有效订单量" not in df.columns and "订单总量" in df.columns:
+        df["有效订单量"] = df["订单总量"]
+
     original_cols = df.columns.tolist()
     norm_original_cols = [normalize_header(col) for col in original_cols]
     norm_to_orig = {normalize_header(col): col for col in original_cols}
@@ -212,6 +252,17 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
             df_aligned[target] = df[norm_to_orig[target_norm]]
         else:
             df_aligned[target] = ""
+
+    # 4. 💡【數值格式強制轉換】確保寫入 Google Sheets 時為數字格式而非字串
+    if task_key in ["03", "04"]:
+        num_cols = ["有效商品销售额", "有效订单量", "有效商品销量", "商品平均价格", "商品均价", "商品销售额", "商品销量", "利润", "利润率"]
+        for col in df_aligned.columns:
+            if any(k in col for k in num_cols):
+                df_aligned[col] = pd.to_numeric(
+                    df_aligned[col].astype(str).str.replace(",", "").str.strip(), 
+                    errors='coerce'
+                )
+
     return df_aligned[target_headers]
 
 def get_gspread_client():
@@ -259,7 +310,8 @@ def upload_to_google_sheets(df, task_key, title_list=None):
         for row in clean_df.values.tolist():
             data_to_upload.append([("" if pd.isna(cell) else cell) for cell in row])
         
-        retry_on_api_error(worksheet.update, values=data_to_upload, range_name='A1')
+        # 💡 使用 USER_ENTERED 強制 Google Sheets 將數值字串轉回真正的數字
+        retry_on_api_error(worksheet.update, values=data_to_upload, range_name='A1', value_input_option='USER_ENTERED')
         st.write(f"🟢 {worksheet.title} 數據已成功同步。")
     except Exception as e:
         st.error(f"❌ 雲端同步失敗 (Task {task_key})。錯誤: {e}")
@@ -273,14 +325,19 @@ def post_process_steps():
         sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
         if not sheet_source or not sheet_target: return
 
+        # 日期解析：若來源表 A1/B1 有日期字串則解析；否則帶入當前月日日期
         raw_date_text = retry_on_api_error(sheet_source.acell, 'B1').value 
         found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
         if len(found_dates) >= 2:
             d1 = found_dates[0].replace("-", "")[4:]
             d2 = found_dates[1].replace("-", "")[4:]
             final_date_str = f"{d1}-{d2}"
-            retry_on_api_error(sheet_target.update, values=[[final_date_str]], range_name='B1')
-            st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
+        else:
+            today_str = datetime.date.today().strftime("%m%d")
+            final_date_str = f"更新-{today_str}"
+
+        retry_on_api_error(sheet_target.update, values=[[final_date_str]], range_name='B1')
+        st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
 
         v_values = retry_on_api_error(sheet_source.col_values, 22)[4:] 
         filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
@@ -314,8 +371,8 @@ with col1:
 
 with col2:
     st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
-    uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
+    st.markdown('<div class="custom-section-title">📁 03. 銷量報告 / 經營分析</div>', unsafe_allow_html=True)
+    uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」或「经营分析*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
     uploaded_file_04 = st.file_uploader("請上傳「商品利润*.xlsx」檔案 (單選)", type=["xlsx"], key="u04")
@@ -323,7 +380,7 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 🎯 這裡的 Button 就會自動套用 CSS 變成優雅的冷岩灰藍底色囉！
+# 🎯 按鈕點擊後執行流程
 if st.button("🔥 啟動自動化整合全流程", type="primary", use_container_width=True):
     if not (uploaded_files_01 or uploaded_files_lan or uploaded_files_onl or uploaded_file_03 or uploaded_file_04):
         st.error("🚨 流程終止：您尚未上傳任何 Excel 檔案。")
@@ -362,13 +419,26 @@ if st.button("🔥 啟動自動化整合全流程", type="primary", use_containe
                     upload_to_google_sheets(df02, "02")
 
             if uploaded_file_03:
-                st.toast("⏳ 正在處理 03.銷量報告...")
+                st.toast("⏳ 正在處理 03.銷量報告 / 經營分析...")
                 try:
-                    t03 = pd.read_excel(uploaded_file_03, nrows=1, header=None).values.tolist()[0]
-                    df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=1)
-                    if df03 is not None: upload_to_google_sheets(df03, "03", title_list=t03)
-                    else: has_error = True
-                except Exception as e: has_error = True
+                    # 判斷是否為帶有第一行時間標頭的舊版銷量報告
+                    preview_df = pd.read_excel(uploaded_file_03, nrows=1, header=None)
+                    is_new_format = any("产品名称" in str(x) or "店铺SKU编号" in str(x) for x in preview_df.iloc[0].values)
+                    
+                    if is_new_format:
+                        t03 = None
+                        df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=0)
+                    else:
+                        t03 = preview_df.values.tolist()[0]
+                        df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=1)
+
+                    if df03 is not None: 
+                        upload_to_google_sheets(df03, "03", title_list=t03)
+                    else: 
+                        has_error = True
+                except Exception as e: 
+                    st.error(f"❌ 03.報表處理發生錯誤: {e}")
+                    has_error = True
 
             if uploaded_file_04:
                 st.toast("⏳ 正在處理 04.利潤報告...")
@@ -377,7 +447,9 @@ if st.button("🔥 啟動自動化整合全流程", type="primary", use_containe
                     df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
                     if df04 is not None: upload_to_google_sheets(df04, "04", title_list=t04)
                     else: has_error = True
-                except Exception as e: has_error = True
+                except Exception as e: 
+                    st.error(f"❌ 04.利潤報告處理發生錯誤: {e}")
+                    has_error = True
 
             if uploaded_file_03 and not has_error:
                 post_process_steps()
