@@ -89,6 +89,73 @@ def normalize_header(header_name):
     return HEADER_ALIASES.get(value, value)
 
 
+def normalize_identifier(value):
+    """將 Excel 常見的識別碼型態轉成穩定字串，並保留 SKU 內部符號。"""
+    if pd.isna(value):
+        return ""
+    text = unicodedata.normalize("NFKC", str(value)).strip()
+    if text.lower() in {"nan", "none", "<na>"}:
+        return ""
+    if re.fullmatch(r"[+-]?\d+\.0+", text):
+        text = text.split(".", 1)[0]
+    return text
+
+
+def normalize_identifier_series(series):
+    return series.map(normalize_identifier)
+
+
+def looks_like_sku(value):
+    """只用於判斷 01 的 SKU／名稱是否明顯對調，不否定較特殊的合法 SKU。"""
+    text = normalize_identifier(value)
+    return bool(
+        text
+        and text != "0"
+        and re.fullmatch(r"[A-Za-z0-9-]+", text)
+        and re.search(r"[A-Za-z]", text)
+        and re.search(r"\d", text)
+    )
+
+
+def repair_inventory_sku_name_columns(df, file_name):
+    """修正新版庫存清單中少數 SKU编号／名称欄位互換的資料列。"""
+    repaired = df.copy()
+    repaired["SKU编号"] = normalize_identifier_series(repaired["SKU编号"])
+    repaired["名称"] = repaired["名称"].map(
+        lambda value: "" if pd.isna(value) else str(value).strip()
+    )
+
+    swap_mask = (
+        ~repaired["SKU编号"].map(looks_like_sku)
+        & repaired["名称"].map(looks_like_sku)
+    )
+    if swap_mask.any():
+        old_sku = repaired.loc[swap_mask, "SKU编号"].copy()
+        repaired.loc[swap_mask, "SKU编号"] = repaired.loc[swap_mask, "名称"].values
+        repaired.loc[swap_mask, "名称"] = old_sku.values
+        repaired["SKU编号"] = normalize_identifier_series(repaired["SKU编号"])
+        excel_rows = [int(index) + 2 for index in repaired.index[swap_mask][:10]]
+        st.info(
+            f"ℹ️ 01 自動修正：`{file_name}` 有 {int(swap_mask.sum())} 列 "
+            f"SKU编号／名称對調（Excel 列號示例：{excel_rows}）。"
+        )
+
+    return repaired
+
+
+def validate_sales_skus(series, report_label, excel_row_offset):
+    """銷量報告的 SKU 是下游彙總鍵；空白或 0 必須中止，避免錯誤合併。"""
+    normalized = normalize_identifier_series(series)
+    invalid_mask = normalized.isin(["", "0"])
+    if invalid_mask.any():
+        excel_rows = [int(index) + excel_row_offset for index in normalized.index[invalid_mask][:10]]
+        raise ValueError(
+            f"{report_label} 有 {int(invalid_mask.sum())} 列店鋪SKU為空白或 0；"
+            f"請回 BS 修正後重新匯出。Excel 列號示例：{excel_rows}。"
+        )
+    return normalized
+
+
 def reset_uploaded_file(uploaded_file):
     if hasattr(uploaded_file, "seek"):
         uploaded_file.seek(0)
@@ -143,6 +210,21 @@ def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header
     for target in target_headers:
         source = normalized_to_original.get(normalize_header(target))
         aligned[target] = df[source] if source is not None else ""
+
+    if task_key == "01":
+        aligned = repair_inventory_sku_name_columns(
+            aligned, uploaded_file_name(uploaded_file)
+        )
+    elif task_key == "02":
+        # 必須在後續 drop_duplicates 之前整理，否則同一 SKU 只因空白而被當成兩筆。
+        aligned["SKU"] = normalize_identifier_series(aligned["SKU"])
+        aligned["店铺昵称"] = aligned["店铺昵称"].map(
+            lambda value: "" if pd.isna(value) else str(value).strip()
+        )
+    elif task_key == "03":
+        aligned["商品SKU"] = validate_sales_skus(
+            aligned["商品SKU"], "舊版銷量報告", 3
+        )
 
     return aligned[target_headers]
 
@@ -211,7 +293,9 @@ def transform_new_sales_report(uploaded_file, report_start, report_end):
 
     canonical = canonical.dropna(how="all").copy()
     canonical["店铺名称"] = canonical["店铺名称"].fillna("").astype(str).str.strip()
-    canonical["店铺SKU编号"] = canonical["店铺SKU编号"].fillna("").astype(str).str.strip()
+    canonical["店铺SKU编号"] = validate_sales_skus(
+        canonical["店铺SKU编号"], "新版經營分析", 2
+    )
 
     blank_key = (canonical["店铺名称"] == "") | (canonical["店铺SKU编号"] == "")
     if blank_key.any():
