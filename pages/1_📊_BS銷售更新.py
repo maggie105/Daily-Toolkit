@@ -21,10 +21,22 @@ SPREADSHEET_ID = "1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8"
 SERVICE_ACCOUNT_FILE = "service_account.json"
 
 SHEET_CONFIGS = {
-    "01": {"gid": "1735114343", "end_col": "AB", "features": ["SKU编号", "现有库存"]},
-    "02": {"gid": "830730835", "end_col": "S", "features": ["店铺昵称", "Item ID", "SKU"]},
-    "03": {"gid": "150603716", "end_col": "Q", "features": ["商品名称", "有效商品销售额"]},
-    "04": {"gid": "790740822", "end_col": "W", "features": ["商品SKU", "利润", "利润率"]},
+    "01": {
+        "gid": "1735114343", "end_col": "AB", "key_col": "B",
+        "features": ["SKU编号", "现有库存"],
+    },
+    "02": {
+        "gid": "830730835", "end_col": "S", "key_col": "M",
+        "features": ["店铺昵称", "Item ID", "SKU"],
+    },
+    "03": {
+        "gid": "150603716", "end_col": "Q", "key_col": "C",
+        "features": ["商品名称", "有效商品销售额"],
+    },
+    "04": {
+        "gid": "790740822", "end_col": "W", "key_col": "A",
+        "features": ["商品SKU", "利润", "利润率"],
+    },
     "target_main": {"gid": "1324377276"},
 }
 
@@ -134,10 +146,8 @@ def repair_inventory_sku_name_columns(df, file_name):
         repaired.loc[swap_mask, "SKU编号"] = repaired.loc[swap_mask, "名称"].values
         repaired.loc[swap_mask, "名称"] = old_sku.values
         repaired["SKU编号"] = normalize_identifier_series(repaired["SKU编号"])
-        excel_rows = [int(index) + 2 for index in repaired.index[swap_mask][:10]]
         st.info(
-            f"ℹ️ 01 自動修正：`{file_name}` 有 {int(swap_mask.sum())} 列 "
-            f"SKU编号／名称對調（Excel 列號示例：{excel_rows}）。"
+            f"ℹ️ 01 資料已自動整理完成（修正 {int(swap_mask.sum())} 筆欄位對調）。"
         )
 
     return repaired
@@ -378,26 +388,24 @@ def prepare_sales_report(uploaded_file, report_start, report_end):
 
 
 def show_sales_preflight(metadata):
-    duplicate_text = ""
-    if metadata["duplicate_store_sku_rows"]:
-        duplicate_text = (
-            f"；同店鋪同SKU重複列 {metadata['duplicate_store_sku_rows']:,} 筆"
-            "（將由雲端透視表加總）"
-        )
-    st.info(
-        f"03 預檢通過｜{metadata['report_type']}｜資料 {metadata['rows']:,} 列｜"
-        f"店鋪 {metadata['stores']:,}｜SKU {metadata['skus']:,}｜"
-        f"有效銷量 {metadata['effective_quantity']:,.0f}｜"
-        f"有效銷售額 {metadata['effective_sales']:,.2f}{duplicate_text}"
-    )
+    st.info(f"ℹ️ 03 資料檢查通過，準備同步（{metadata['rows']:,} 筆）。")
 
 
 # ================= Google Sheets 存取 =================
-def get_worksheet_by_gid(spreadsheet, gid):
-    for sheet in spreadsheet.worksheets():
-        if str(sheet.id) == str(gid):
-            return sheet
-    return None
+def build_worksheet_map(spreadsheet):
+    """一次讀取工作表清單，避免每個任務重複呼叫 Google API。"""
+    return {str(sheet.id): sheet for sheet in spreadsheet.worksheets()}
+
+
+def get_worksheet_by_gid(spreadsheet, gid, worksheet_map=None):
+    if worksheet_map is None:
+        worksheet_map = build_worksheet_map(spreadsheet)
+    return worksheet_map.get(str(gid))
+
+
+def quote_sheet_title(title):
+    """將工作表名稱安全地放入 A1 range。"""
+    return "'" + str(title).replace("'", "''") + "'"
 
 
 def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
@@ -406,7 +414,7 @@ def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
             return func(*args, **kwargs)
         except APIError as exc:
             error_text = str(exc)
-            temporary = any(code in error_text for code in ("429", "500", "503"))
+            temporary = any(code in error_text for code in ("429", "500", "502", "503", "504"))
             if temporary and attempt < max_retries:
                 st.toast(f"⏳ 雲端服務暫時忙碌，{delay} 秒後自動重試 ({attempt}/{max_retries})...")
                 time.sleep(delay)
@@ -445,60 +453,153 @@ def get_gspread_client():
 def dataframe_to_google_values(df, title_list=None):
     values = []
     if title_list:
-        values.append([clean_cell_for_google(cell) for cell in title_list])
+        width = len(df.columns)
+        clean_title = [clean_cell_for_google(cell) for cell in title_list[:width]]
+        clean_title.extend([""] * (width - len(clean_title)))
+        values.append(clean_title)
     values.append([clean_cell_for_google(cell) for cell in df.columns.tolist()])
     for row in df.itertuples(index=False, name=None):
         values.append([clean_cell_for_google(cell) for cell in row])
     return values
 
 
-def upload_to_google_sheets(df, task_key, title_list=None):
-    """先備份目標範圍，再清除與上傳；若失敗則嘗試還原。"""
+def prepare_cloud_upload(df, task_key, title_list=None):
+    """把已驗證資料轉成待批次上傳內容；此步驟不會連線或修改雲端。"""
     if df is None or df.empty:
-        st.error(f"❌ Task {task_key} 沒有可上傳的資料。")
-        return False
+        raise ValueError(f"Task {task_key} 沒有可上傳的資料。")
+    return {
+        "task_key": task_key,
+        "end_col": SHEET_CONFIGS[task_key]["end_col"],
+        "key_col": SHEET_CONFIGS[task_key]["key_col"],
+        "values": dataframe_to_google_values(df, title_list=title_list),
+    }
+
+
+def last_populated_row(value_range):
+    """values.batchGet 會省略尾端空白；回傳關鍵欄最後一個有值的列號。"""
+    columns = value_range.get("values", [])
+    return len(columns[0]) if columns else 0
+
+
+def batch_upload_to_google_sheets(prepared_uploads):
+    """
+    先一次讀取各表關鍵欄列數，再以單一 values.batchUpdate 寫入所有資料。
+
+    寫入失敗時 Google 不會套用該批次；寫入成功後才清除舊資料多出的尾端列，
+    因此不再出現「先清空工作表、上傳途中失敗」的空白視窗。
+    """
+    if not prepared_uploads:
+        return False, None, None
 
     client = get_gspread_client()
     if not client:
-        return False
+        return False, None, None
 
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    worksheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS[task_key]["gid"])
-    if not worksheet:
-        st.error(f"❌ 找不到 Task {task_key} 對應的 Google Sheet。")
-        return False
-
-    end_col = SHEET_CONFIGS[task_key]["end_col"]
-    target_range = f"A:{end_col}"
-    new_values = dataframe_to_google_values(df, title_list=title_list)
-    previous_values = None
+    spreadsheet = None
+    worksheet_map = None
 
     try:
-        previous_values = retry_on_api_error(worksheet.get, target_range)
-        retry_on_api_error(worksheet.batch_clear, [target_range])
-        retry_on_api_error(worksheet.update, values=new_values, range_name="A1")
-        st.write(f"🟢 {worksheet.title} 數據已成功同步。")
-        return True
-    except Exception as exc:
-        st.error(f"❌ 雲端同步失敗 (Task {task_key})。錯誤: {exc}")
-        if previous_values:
+        spreadsheet = retry_on_api_error(client.open_by_key, SPREADSHEET_ID)
+        worksheet_map = retry_on_api_error(build_worksheet_map, spreadsheet)
+
+        resolved_uploads = []
+        key_ranges = []
+        for upload in prepared_uploads:
+            task_key = upload["task_key"]
+            worksheet = get_worksheet_by_gid(
+                spreadsheet,
+                SHEET_CONFIGS[task_key]["gid"],
+                worksheet_map,
+            )
+            if not worksheet:
+                raise ValueError(f"找不到 Task {task_key} 對應的 Google Sheet。")
+
+            sheet_name = quote_sheet_title(worksheet.title)
+            resolved = dict(upload)
+            resolved["worksheet"] = worksheet
+            resolved["sheet_name"] = sheet_name
+            resolved_uploads.append(resolved)
+            key_ranges.append(
+                f"{sheet_name}!{upload['key_col']}:{upload['key_col']}"
+            )
+
+        # 只讀每張表的一個關鍵欄，不再下載 A:末欄的完整舊資料。
+        old_rows_response = retry_on_api_error(
+            spreadsheet.values_batch_get,
+            key_ranges,
+            params={"majorDimension": "COLUMNS"},
+        )
+        old_value_ranges = old_rows_response.get("valueRanges", [])
+        for index, upload in enumerate(resolved_uploads):
+            value_range = old_value_ranges[index] if index < len(old_value_ranges) else {}
+            upload["old_last_row"] = last_populated_row(value_range)
+
+        update_data = []
+        for upload in resolved_uploads:
+            new_last_row = len(upload["values"])
+            upload["new_last_row"] = new_last_row
+            update_data.append({
+                "range": (
+                    f"{upload['sheet_name']}!A1:"
+                    f"{upload['end_col']}{new_last_row}"
+                ),
+                "majorDimension": "ROWS",
+                "values": upload["values"],
+            })
+
+        retry_on_api_error(
+            spreadsheet.values_batch_update,
+            body={
+                "valueInputOption": "RAW",
+                "includeValuesInResponse": False,
+                "data": update_data,
+            },
+        )
+
+        # 新資料確定寫入後，才一次清除舊資料較長時留下的尾端。
+        stale_ranges = []
+        for upload in resolved_uploads:
+            if upload["old_last_row"] > upload["new_last_row"]:
+                stale_ranges.append(
+                    f"{upload['sheet_name']}!A{upload['new_last_row'] + 1}:"
+                    f"{upload['end_col']}{upload['old_last_row']}"
+                )
+        if stale_ranges:
             try:
-                retry_on_api_error(worksheet.batch_clear, [target_range])
-                retry_on_api_error(worksheet.update, values=previous_values, range_name="A1")
-                st.warning(f"↩️ Task {task_key} 已嘗試還原上傳前資料。")
-            except Exception as rollback_exc:
-                st.error(f"🚨 Task {task_key} 還原失敗，請立即檢查雲端表格：{rollback_exc}")
-        return False
+                retry_on_api_error(
+                    spreadsheet.values_batch_clear,
+                    body={"ranges": stale_ranges},
+                )
+            except Exception as exc:
+                st.error(
+                    "⚠️ 新資料已寫入，但舊資料尾端清理失敗；"
+                    f"請重跑一次或檢查雲端表格。錯誤: {exc}"
+                )
+                return False, spreadsheet, worksheet_map
+
+        for upload in resolved_uploads:
+            st.write(f"🟢 {upload['worksheet'].title} 數據已成功同步。")
+        return True, spreadsheet, worksheet_map
+    except Exception as exc:
+        st.error(f"❌ 雲端批次同步失敗，已停止後續處理。錯誤: {exc}")
+        return False, spreadsheet, worksheet_map
 
 
-def post_process_steps():
+def post_process_steps(spreadsheet=None, worksheet_map=None):
     try:
-        client = get_gspread_client()
-        if not client:
-            return False
-        spreadsheet = client.open_by_key(SPREADSHEET_ID)
-        source_sheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS["03"]["gid"])
-        target_sheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS["target_main"]["gid"])
+        if spreadsheet is None:
+            client = get_gspread_client()
+            if not client:
+                return False
+            spreadsheet = retry_on_api_error(client.open_by_key, SPREADSHEET_ID)
+        if worksheet_map is None:
+            worksheet_map = retry_on_api_error(build_worksheet_map, spreadsheet)
+        source_sheet = get_worksheet_by_gid(
+            spreadsheet, SHEET_CONFIGS["03"]["gid"], worksheet_map
+        )
+        target_sheet = get_worksheet_by_gid(
+            spreadsheet, SHEET_CONFIGS["target_main"]["gid"], worksheet_map
+        )
         if not source_sheet or not target_sheet:
             st.error("❌ 找不到 03 或採購主表工作表。")
             return False
@@ -593,6 +694,42 @@ div[data-testid="stToast"] span, div[data-testid="stToast"] p {
 """
 
 
+def save_run_summary(status, task_results=None, elapsed_seconds=None):
+    """將執行結果留在 session_state，避免一般 Streamlit rerun 後訊息消失。"""
+    st.session_state["last_run_summary"] = {
+        "status": status,
+        "task_results": dict(task_results or {}),
+        "elapsed_seconds": elapsed_seconds,
+    }
+
+
+def render_last_run_summary():
+    summary = st.session_state.get("last_run_summary")
+    if not summary:
+        return
+
+    task_results = summary.get("task_results", {})
+    task_text = "｜".join(
+        f"{task_name}：{result}"
+        for task_name, result in task_results.items()
+    )
+    elapsed = summary.get("elapsed_seconds")
+    elapsed_text = f"｜耗時 {elapsed:,.2f} 秒" if elapsed is not None else ""
+    details = f"（{task_text}{elapsed_text}）" if task_text or elapsed_text else ""
+
+    if summary.get("status") == "success":
+        st.success(f"✨ 上次流程已完成{details}")
+    elif summary.get("status") == "warning":
+        st.warning(f"⚠️ 上次流程已結束，但有項目失敗{details}")
+    elif summary.get("status") == "error":
+        st.error(f"❌ 上次流程未執行完成{details}")
+    else:
+        st.warning(
+            "⚠️ 上次流程沒有留下完成標記，可能在執行中發生頁面重新整理或連線中斷"
+            f"{details}。請先核對雲端資料，再決定是否重跑。"
+        )
+
+
 def main():
     st.set_page_config(page_title="BS銷售更新", page_icon="📊", layout="wide")
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
@@ -605,7 +742,7 @@ def main():
         """
         <p style='color:#555;margin-bottom:5px;'>請上傳對應的 Excel 報表；系統會先驗證欄位，再同步至雲端。</p>
         <p style='margin-top:0;'><a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color:#2b5c8f;font-weight:bold;text-decoration:underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
-        <p style='margin-top:5px;font-size:12px;color:#94a3b8;'>系統已啟用欄位防呆、上傳前備份與雲端暫時性錯誤重試。</p>
+        <p style='margin-top:5px;font-size:12px;color:#94a3b8;'>系統已啟用欄位防呆、安全批次同步與雲端暫時性錯誤重試。</p>
         """,
         unsafe_allow_html=True,
     )
@@ -655,45 +792,70 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if not st.button("🔥 啟動自動化整合全流程", type="primary", use_container_width=True):
+    run_clicked = st.button(
+        "🔥 啟動自動化整合全流程", type="primary", use_container_width=True
+    )
+    if not run_clicked:
+        render_last_run_summary()
         return
 
     if not (uploaded_files_01 or uploaded_files_lan or uploaded_files_onl or uploaded_file_03 or uploaded_file_04):
         st.error("🚨 流程終止：您尚未上傳任何 Excel 檔案。")
+        save_run_summary("error", {"流程": "未選擇檔案"}, 0)
         return
 
     start_time = time.time()
     has_error = False
-    task03_uploaded = False
+    task_results = {}
+    prepared_uploads = []
+    selected_task_keys = []
+    save_run_summary("running", task_results)
 
     with st.spinner("系統正在驗證並同步數據，請稍候..."):
+        # 第一階段：先在本機完成所有檔案的讀取與驗證，不修改雲端。
         if uploaded_files_01:
+            selected_task_keys.append("01")
             st.toast("⏳ 正在處理 01.庫存清單...")
             dataframes = []
+            task_input_error = False
             for file in uploaded_files_01:
                 result = safe_read_and_align_uploaded(file, HEADERS_01, "01")
                 if result is None:
                     has_error = True
+                    task_input_error = True
                 else:
                     dataframes.append(result)
-            if dataframes:
-                df01 = pd.concat(dataframes, ignore_index=True)
-                if not upload_to_google_sheets(df01, "01"):
+            if task_input_error or not dataframes:
+                has_error = True
+                task_results["01"] = "檢查失敗"
+            else:
+                try:
+                    df01 = pd.concat(dataframes, ignore_index=True)
+                    prepared_uploads.append(prepare_cloud_upload(df01, "01"))
+                    task_results["01"] = "檢查通過"
+                except Exception as exc:
+                    st.error(f"❌ 01 報表處理失敗：{exc}")
                     has_error = True
+                    task_results["01"] = "檢查失敗"
+            save_run_summary("running", task_results)
 
         if uploaded_files_lan or uploaded_files_onl:
+            selected_task_keys.append("02")
             st.toast("⏳ 正在處理 02.在線產品更新...")
             lan_dataframes, other_dataframes = [], []
+            task_input_error = False
             for file in uploaded_files_lan:
                 result = safe_read_and_align_uploaded(file, HEADERS_02, "02")
                 if result is None:
                     has_error = True
+                    task_input_error = True
                 else:
                     lan_dataframes.append(result)
             for file in uploaded_files_onl:
                 result = safe_read_and_align_uploaded(file, HEADERS_02, "02")
                 if result is None:
                     has_error = True
+                    task_input_error = True
                 else:
                     other_dataframes.append(result)
 
@@ -706,50 +868,101 @@ def main():
                 if other_dataframes else pd.DataFrame(columns=HEADERS_02)
             )
             df02 = pd.concat([df_lan, df_other], ignore_index=True)
-            if not df02.empty:
-                df02["priority"] = df02["店铺昵称"].apply(
-                    lambda value: 0 if value == "02-懶餅乾家居" else 1
-                )
-                df02 = (
-                    df02.sort_values(by=["SKU", "priority"])
-                    .drop_duplicates(subset=["SKU"], keep="first")
-                    .drop(columns=["priority"])
-                )
-                if not upload_to_google_sheets(df02, "02"):
+            if task_input_error or df02.empty:
+                has_error = True
+                task_results["02"] = "檢查失敗"
+            else:
+                try:
+                    df02["priority"] = df02["店铺昵称"].apply(
+                        lambda value: 0 if value == "02-懶餅乾家居" else 1
+                    )
+                    df02 = (
+                        df02.sort_values(by=["SKU", "priority"])
+                        .drop_duplicates(subset=["SKU"], keep="first")
+                        .drop(columns=["priority"])
+                    )
+                    prepared_uploads.append(prepare_cloud_upload(df02, "02"))
+                    task_results["02"] = "檢查通過"
+                except Exception as exc:
+                    st.error(f"❌ 02 報表處理失敗：{exc}")
                     has_error = True
+                    task_results["02"] = "檢查失敗"
+            save_run_summary("running", task_results)
 
         if uploaded_file_03:
+            selected_task_keys.append("03")
             st.toast("⏳ 正在處理 03.銷量報告...")
             try:
                 df03, title03, metadata03 = prepare_sales_report(
                     uploaded_file_03, report_start, report_end
                 )
                 show_sales_preflight(metadata03)
-                task03_uploaded = upload_to_google_sheets(df03, "03", title_list=title03)
-                if not task03_uploaded:
-                    has_error = True
+                prepared_uploads.append(
+                    prepare_cloud_upload(df03, "03", title_list=title03)
+                )
+                task_results["03"] = "檢查通過"
             except Exception as exc:
                 st.error(f"❌ 03 報表處理失敗：{exc}")
                 has_error = True
+                task_results["03"] = "檢查失敗"
+            save_run_summary("running", task_results)
 
         if uploaded_file_04:
+            selected_task_keys.append("04")
             st.toast("⏳ 正在處理 04.利潤報告...")
             try:
                 title04 = read_excel(uploaded_file_04, nrows=1, header=None).values.tolist()[0]
                 df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
-                if df04 is None or not upload_to_google_sheets(df04, "04", title_list=title04):
+                if df04 is None:
                     has_error = True
+                    task_results["04"] = "檢查失敗"
+                else:
+                    prepared_uploads.append(
+                        prepare_cloud_upload(df04, "04", title_list=title04)
+                    )
+                    task_results["04"] = "檢查通過"
             except Exception as exc:
                 st.error(f"❌ 04 報表處理失敗：{exc}")
                 has_error = True
+                task_results["04"] = "檢查失敗"
+            save_run_summary("running", task_results)
 
-        if task03_uploaded and not post_process_steps():
-            has_error = True
+        # 第二階段：所有已選檔案都通過後，才共用同一連線批次寫入。
+        spreadsheet = None
+        worksheet_map = None
+        if has_error:
+            for task_key in selected_task_keys:
+                if task_results.get(task_key) == "檢查通過":
+                    task_results[task_key] = "未同步"
+            st.error("⛔ 有檔案未通過檢查，本次所有雲端資料均未變更。")
+        else:
+            st.toast("☁️ 所有檔案檢查通過，正在批次同步雲端...")
+            upload_ok, spreadsheet, worksheet_map = batch_upload_to_google_sheets(
+                prepared_uploads
+            )
+            if upload_ok:
+                for task_key in selected_task_keys:
+                    task_results[task_key] = "成功"
+            else:
+                has_error = True
+                for task_key in selected_task_keys:
+                    task_results[task_key] = "同步失敗"
+            save_run_summary("running", task_results)
 
-    if has_error:
-        st.warning("⚠️ 流程已結束，但過程中發生錯誤；請依畫面訊息檢查。")
-    else:
-        st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
+            if upload_ok and "03" in selected_task_keys:
+                post_process_ok = post_process_steps(spreadsheet, worksheet_map)
+                task_results["後處理"] = "成功" if post_process_ok else "失敗"
+                if not post_process_ok:
+                    has_error = True
+                save_run_summary("running", task_results)
+
+    elapsed_seconds = round(time.time() - start_time, 2)
+    save_run_summary(
+        "warning" if has_error else "success",
+        task_results,
+        elapsed_seconds,
+    )
+    render_last_run_summary()
 
 
 if __name__ == "__main__":
