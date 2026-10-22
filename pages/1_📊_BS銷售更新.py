@@ -1,388 +1,672 @@
-import streamlit as st
-import pandas as pd
-import os
-import time
-import gspread
-import warnings
-import re
 import json
-from oauth2client.service_account import ServiceAccountCredentials
-from gspread.exceptions import APIError
+import os
+import re
+import time
+import unicodedata
+import warnings
+from datetime import date
 
-# 1. 隱藏 openpyxl 的格式警告
+import gspread
+import pandas as pd
+import streamlit as st
+from gspread.exceptions import APIError
+from oauth2client.service_account import ServiceAccountCredentials
+
+
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
-# ================= 網頁頁面初始設定 =================
-st.set_page_config(page_title="BS銷售更新", page_icon="📊", layout="wide")
-
-# 🛠️ 終極北歐風裝潢加強版 (超強制 CSS 注入)
-st.markdown("""
-    <style>
-    /* 全站北歐風淺色背景與冷灰色調文字 */
-    .stApp {
-        background-color: #fcfcfc !important;
-        color: #2b303a !important;
-    }
-    /* 側邊欄改為溫潤的淺米灰 */
-    [data-testid="stSidebar"] {
-        background-color: #f3f4f6 !important;
-        border-right: 1px solid #e5e7eb;
-    }
-    /* 標題與內文颜色統一 */
-    h1, h2, h3, h4, h5, h6, p, label, .stMarkdown {
-        color: #2b303a !important;
-    }
-    /* 左右兩大區塊卡片外框 */
-    .upload-card {
-        background-color: #ffffff;
-        padding: 24px; 
-        border-radius: 12px; 
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-    }
-    /* 將上傳檔案的大背景改為北歐簡約淡灰 + 細虛線外框 */
-    [data-testid="stFileUploader"] {
-        background-color: #fafafa !important;
-        border: 1px dashed #cbd5e1 !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-    }
-    [data-testid="stFileUploader"] section {
-        background-color: transparent !important;
-    }
-    div[data-testid="stFileUploadDropzone"] {
-        background-color: #fafafa !important;
-    }
-    
-    /* 強制將所有 Upload 小按鈕改為「常態北歐灰底黑字」 */
-    button[data-testid*="stBaseButton"] {
-        background-color: #e2e8f0 !important;
-        color: #475569 !important;
-        border: 1px solid #cbd5e1 !important;
-        transition: all 0.2s ease;
-    }
-    button[data-testid*="stBaseButton"]:hover {
-        background-color: #cbd5e1 !important;
-        color: #334155 !important;
-    }
-    
-    /* 🎨 1. 將大標題強制改為極簡深黑色 */
-    .custom-main-title {
-        color: #1e293b !important;  
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* 🎨 2. 將啟動按鈕改為北歐風冷岩灰藍色、白字 */
-    .stButton > button {
-        background-color: #475569 !important; 
-        border-color: #475569 !important;
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
-        border-radius: 8px !important;
-        padding: 12px 0 !important;
-        transition: all 0.2s ease !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-    }
-    /* 按鈕滑鼠懸停效果 */
-    .stButton > button:hover {
-        background-color: #334155 !important; 
-        border-color: #334155 !important;
-        color: #ffffff !important;
-    }
-    /* 強制按鈕內部的文字維持純白與粗體 */
-    .stButton > button p {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    
-    /* 自訂精訊的中等標題字體樣式 */
-    .custom-section-title {
-        color: #2b5c8f !important;
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        margin-bottom: 12px !important;
-        margin-top: 5px !important;
-        display: flex;
-        align-items: center;
-    }
-
-    /* 右上角 Toast 視窗優化 */
-    div[data-testid="stToast"] {
-        background-color: #334155 !important; 
-        border: 1px solid #1e293b !important;  
-        border-radius: 8px !important;         
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; 
-    }
-    div[data-testid="stToast"], 
-    div[data-testid="stToast"] div, 
-    div[data-testid="stToast"] span, 
-    div[data-testid="stToast"] p {
-        color: #ffffff !important;            
-        font-weight: 900 !important;          
-        font-size: 15px !important;
-        letter-spacing: 0.5px !important;
-    }
-    div[data-testid="stToast"] button {
-        color: #94a3b8 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # ================= Google Sheets 核心設定 =================
-SPREADSHEET_ID = '1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8'
-SERVICE_ACCOUNT_FILE = 'service_account.json'
+SPREADSHEET_ID = "1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8"
+SERVICE_ACCOUNT_FILE = "service_account.json"
 
 SHEET_CONFIGS = {
-    "01": {"gid": "1735114343", "end_col": "AB", "features": ["SKU编号", "现有库存"]}, 
-    "02": {"gid": "830730835", "end_col": "S", "features": ["店铺昵称", "Item ID", "SKU"]},  
-    "03": {"gid": "150603716", "end_col": "Q", "features": ["商品名称", "有效商品销售额"]},  
-    "04": {"gid": "790740822", "end_col": "W", "features": ["商品SKU", "利润", "利润率"]},  
-    "target_main": {"gid": "1324377276"}         
+    "01": {"gid": "1735114343", "end_col": "AB", "features": ["SKU编号", "现有库存"]},
+    "02": {"gid": "830730835", "end_col": "S", "features": ["店铺昵称", "Item ID", "SKU"]},
+    "03": {"gid": "150603716", "end_col": "Q", "features": ["商品名称", "有效商品销售额"]},
+    "04": {"gid": "790740822", "end_col": "W", "features": ["商品SKU", "利润", "利润率"]},
+    "target_main": {"gid": "1324377276"},
 }
 
+
 # ================= 標準表頭定義 =================
-HEADERS_01 = ["Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)", "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架", "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数", "加權成本價", "總成本價", "銷售狀態", "一級分類", "二級分類", "三級分類", "SKU類型", "備註"]
-HEADERS_02 = ["店铺昵称", "分类_L1", "分类_L2", "分类_L3", "产品名称", "Item ID", "销量", "收藏", "浏览量", "Parent SKU", "变种", "变种ID", "SKU", "库存", "价格", "促销价", "限购", "平台创建時間", "发货期"]
-HEADERS_03 = ["商品名称", "店铺", "商品SKU", "有效商品销售额", "有效订单量", "有效商品销量", "商品平均价格", "商品销售额", "商品销量", "订单总量", "包裹总量", "退款商品金额", "退款订单数", "退款商品数", "取消商品金額", "取消訂單數", "取消商品數"]
-HEADERS_04 = ["商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润", "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率", "商品总销售额", "折扣&优惠补贴", "买家支付运费", "卖家支付運費", "佣金", "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用"]
+HEADERS_01 = [
+    "Image URL", "SKU编号", "名称", "重量(g)", "长(cm)", "宽(cm)", "高(cm)",
+    "仓库", "库区", "货架位", "现有库存", "订单已锁", "整仓可用", "整仓未上架",
+    "活动预留", "在途中", "在途总成本", "警戒库存", "预测日销量", "预计可售天数",
+    "加權成本價", "總成本價", "銷售狀態", "一級分類", "二級分類", "三級分類",
+    "SKU類型", "備註",
+]
 
-# ================= 工具函數 =================
+HEADERS_02 = [
+    "店铺昵称", "分类_L1", "分类_L2", "分类_L3", "产品名称", "Item ID", "销量",
+    "收藏", "浏览量", "Parent SKU", "变种", "变种ID", "SKU", "库存", "价格",
+    "促销价", "限购", "平台创建時間", "发货期",
+]
+
+# 雲端 03 工作表維持舊版 A:Q 架構，避免既有透視表和公式大幅改寫。
+HEADERS_03 = [
+    "商品名称", "店铺", "商品SKU", "有效商品销售额", "有效订单量", "有效商品销量",
+    "商品平均价格", "商品销售额", "商品销量", "订单总量", "包裹总量", "退款商品金额",
+    "退款订单数", "退款商品数", "取消商品金額", "取消訂單數", "取消商品數",
+]
+
+HEADERS_04 = [
+    "商品SKU", "店铺", "商品名称", "分类", "商品收入", "总成本", "利润",
+    "单个商品利润", "利润率", "订单数量", "销售数量", "退货数量", "退货率",
+    "商品总销售额", "折扣&优惠补贴", "买家支付运费", "卖家支付運費", "佣金",
+    "交易費", "服務費", "營銷費用", "退款金額", "平台其他費用",
+]
+
+NEW_03_REQUIRED_HEADERS = [
+    "产品名称", "SKU_ID", "店铺名称", "店铺SKU编号", "订单总量", "有效订单总量",
+    "产品销量", "有效产品销量", "产品销售额", "有效产品销售额", "取消订单量",
+    "取消产品销售额", "取消产品销量", "退款订单量", "退款产品销售额", "退款产品销量",
+]
+
+
+# ================= 表頭與資料處理 =================
+TRAD_TO_SIMP = {
+    "銷": "销", "額": "额", "庫": "库", "單": "单", "價": "价", "潤": "润",
+    "貨": "货", "類": "类", "幣": "币", "應": "应", "實": "实", "項": "项",
+    "權": "权", "總": "总", "狀": "状", "態": "态", "級": "级", "備": "备",
+    "註": "注", "時": "时", "間": "间", "運": "运", "費": "费", "務": "务",
+    "營": "营", "稱": "称", "號": "号", "產": "产", "訂": "订", "鋪": "铺",
+    "變": "变", "長": "长", "寬": "宽", "預": "预", "測": "测", "創": "创",
+}
+
+HEADER_ALIASES = {
+    "商品均价": "商品平均价格",
+}
+
+
 def normalize_header(header_name):
-    s = str(header_name).strip()
-    trad_to_simp = {
-        "量": "量", "銷": "销", "額": "额", "庫": "库", "存": "存", 
-        "單": "单", "價": "价", "利": "利", "潤": "润", "貨": "货", 
-        "類": "类", "幣": "币", "應": "应", "實": "实", "項": "项",
-        "權": "权", "總": "总", "狀": "状", "態": "态", "級": "级", 
-        "備": "备", "註": "注"
-    }
-    for trad, simp in trad_to_simp.items():
-        s = s.replace(trad, simp)
-    return s
+    """統一空白、全半形與常見繁簡字，避免同義表頭被誤判為缺欄。"""
+    value = unicodedata.normalize("NFKC", str(header_name)).strip()
+    value = re.sub(r"\s+", "", value)
+    for trad, simp in TRAD_TO_SIMP.items():
+        value = value.replace(trad, simp)
+    return HEADER_ALIASES.get(value, value)
 
-def get_worksheet_by_gid(sh, gid):
-    for sheet in sh.worksheets():
+
+def reset_uploaded_file(uploaded_file):
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+
+def uploaded_file_name(uploaded_file):
+    return getattr(uploaded_file, "name", os.path.basename(str(uploaded_file)))
+
+
+def read_excel(uploaded_file, **kwargs):
+    reset_uploaded_file(uploaded_file)
+    return pd.read_excel(uploaded_file, **kwargs)
+
+
+def to_numeric_series(series):
+    cleaned = series.astype(str).str.replace(",", "", regex=False).str.strip()
+    return pd.to_numeric(cleaned, errors="coerce").fillna(0)
+
+
+def clean_cell_for_google(cell):
+    if pd.isna(cell):
+        return ""
+    if hasattr(cell, "item"):
+        cell = cell.item()
+    if isinstance(cell, (pd.Timestamp, date)):
+        return cell.isoformat()
+    return cell
+
+
+def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header_row=0):
+    """讀取 01／02／04 或舊版 03，依標準欄位名稱重新排列。"""
+    try:
+        df = read_excel(uploaded_file, header=header_row)
+    except Exception as exc:
+        st.error(f"❌ 無法讀取檔案 `{uploaded_file_name(uploaded_file)}`。錯誤資訊: {exc}")
+        return None
+
+    original_cols = df.columns.tolist()
+    normalized_to_original = {}
+    for col in original_cols:
+        normalized_to_original[normalize_header(col)] = col
+
+    for feature in SHEET_CONFIGS[task_key]["features"]:
+        if normalize_header(feature) not in normalized_to_original:
+            st.error(
+                f"🚨 檔案防呆攔截：`{uploaded_file_name(uploaded_file)}` "
+                f"找不到關鍵欄位 `{feature}`。"
+            )
+            return None
+
+    aligned = pd.DataFrame(index=df.index)
+    for target in target_headers:
+        source = normalized_to_original.get(normalize_header(target))
+        aligned[target] = df[source] if source is not None else ""
+
+    return aligned[target_headers]
+
+
+def detect_sales_report_type(uploaded_file):
+    """辨識新版經營分析或舊版銷量報告。"""
+    first_row_header = read_excel(uploaded_file, header=0, nrows=5)
+    normalized = {normalize_header(col) for col in first_row_header.columns}
+    required = {normalize_header(col) for col in NEW_03_REQUIRED_HEADERS}
+    if required.issubset(normalized):
+        return "business_analysis"
+
+    second_row_header = read_excel(uploaded_file, header=1, nrows=5)
+    normalized_old = {normalize_header(col) for col in second_row_header.columns}
+    old_required = {
+        normalize_header("商品名称"),
+        normalize_header("店铺"),
+        normalize_header("商品SKU"),
+        normalize_header("有效商品销售额"),
+        normalize_header("有效商品销量"),
+    }
+    if old_required.issubset(normalized_old):
+        return "legacy_sales_report"
+
+    raise ValueError("無法辨識 03 報表：既不是新版經營分析，也不是舊版銷量報告。")
+
+
+def validate_new_sales_relationships(df):
+    checks = [
+        ("有效订单总量", "订单总量", "取消订单量", 0.000001),
+        ("有效产品销量", "产品销量", "取消产品销量", 0.000001),
+        ("有效产品销售额", "产品销售额", "取消产品销售额", 0.011),
+    ]
+    problems = []
+    for effective, gross, cancelled, tolerance in checks:
+        difference = (
+            to_numeric_series(df[effective])
+            - (to_numeric_series(df[gross]) - to_numeric_series(df[cancelled]))
+        ).abs()
+        bad_count = int((difference > tolerance).sum())
+        if bad_count:
+            problems.append(f"{effective} 有 {bad_count} 列不符合 {gross}－{cancelled}")
+    if problems:
+        raise ValueError("；".join(problems))
+
+
+def transform_new_sales_report(uploaded_file, report_start, report_end):
+    if report_start is None or report_end is None:
+        raise ValueError("新版經營分析檔案沒有日期資訊，請先選擇報表開始日與結束日。")
+    if report_start > report_end:
+        raise ValueError("報表開始日不可晚於結束日。")
+
+    source = read_excel(uploaded_file, header=0)
+    normalized_to_original = {normalize_header(col): col for col in source.columns}
+    missing = [
+        col for col in NEW_03_REQUIRED_HEADERS
+        if normalize_header(col) not in normalized_to_original
+    ]
+    if missing:
+        raise ValueError("新版經營分析缺少必要欄位：" + "、".join(missing))
+
+    # 重新命名成固定的新版欄位名稱，避免繁簡體或空白差異。
+    canonical = pd.DataFrame(index=source.index)
+    for target in NEW_03_REQUIRED_HEADERS:
+        canonical[target] = source[normalized_to_original[normalize_header(target)]]
+
+    canonical = canonical.dropna(how="all").copy()
+    canonical["店铺名称"] = canonical["店铺名称"].fillna("").astype(str).str.strip()
+    canonical["店铺SKU编号"] = canonical["店铺SKU编号"].fillna("").astype(str).str.strip()
+
+    blank_key = (canonical["店铺名称"] == "") | (canonical["店铺SKU编号"] == "")
+    if blank_key.any():
+        raise ValueError(f"新版經營分析有 {int(blank_key.sum())} 列缺少店鋪名稱或店鋪SKU編號。")
+
+    numeric_columns = [
+        "订单总量", "有效订单总量", "产品销量", "有效产品销量", "产品销售额",
+        "有效产品销售额", "取消订单量", "取消产品销售额", "取消产品销量",
+        "退款订单量", "退款产品销售额", "退款产品销量",
+    ]
+    for col in numeric_columns:
+        canonical[col] = to_numeric_series(canonical[col])
+
+    validate_new_sales_relationships(canonical)
+
+    gross_quantity = canonical["产品销量"]
+    average_price = canonical["产品销售额"].div(gross_quantity.where(gross_quantity != 0)).fillna(0)
+
+    output = pd.DataFrame({
+        "商品名称": canonical["产品名称"],
+        "店铺": canonical["店铺名称"],
+        "商品SKU": canonical["店铺SKU编号"],
+        "有效商品销售额": canonical["有效产品销售额"],
+        "有效订单量": canonical["有效订单总量"],
+        "有效商品销量": canonical["有效产品销量"],
+        "商品平均价格": average_price,
+        "商品销售额": canonical["产品销售额"],
+        "商品销量": canonical["产品销量"],
+        "订单总量": canonical["订单总量"],
+        # 新版經營分析沒有包裹總量；目前下游沒有使用此欄，保留空白以維持 A:Q。
+        "包裹总量": "",
+        "退款商品金额": canonical["退款产品销售额"],
+        "退款订单数": canonical["退款订单量"],
+        "退款商品数": canonical["退款产品销量"],
+        "取消商品金額": canonical["取消产品销售额"],
+        "取消訂單數": canonical["取消订单量"],
+        "取消商品數": canonical["取消产品销量"],
+    })[HEADERS_03]
+
+    title = ["经营分析", f"时间:{report_start.isoformat()}-{report_end.isoformat()}"]
+    title.extend([""] * (len(HEADERS_03) - len(title)))
+
+    metadata = {
+        "report_type": "新版經營分析－店鋪SKU",
+        "rows": len(output),
+        "stores": canonical["店铺名称"].nunique(),
+        "skus": canonical["店铺SKU编号"].nunique(),
+        "duplicate_store_sku_rows": int(
+            canonical.duplicated(["店铺名称", "店铺SKU编号"], keep=False).sum()
+        ),
+        "effective_quantity": float(canonical["有效产品销量"].sum()),
+        "effective_sales": float(canonical["有效产品销售额"].sum()),
+    }
+    return output, title, metadata
+
+
+def transform_legacy_sales_report(uploaded_file):
+    title = read_excel(uploaded_file, nrows=1, header=None).values.tolist()[0]
+    output = safe_read_and_align_uploaded(uploaded_file, HEADERS_03, "03", header_row=1)
+    if output is None:
+        raise ValueError("舊版銷量報告欄位驗證失敗。")
+
+    metadata = {
+        "report_type": "舊版銷量報告",
+        "rows": len(output),
+        "stores": output["店铺"].nunique(),
+        "skus": output["商品SKU"].nunique(),
+        "duplicate_store_sku_rows": int(output.duplicated(["店铺", "商品SKU"], keep=False).sum()),
+        "effective_quantity": float(to_numeric_series(output["有效商品销量"]).sum()),
+        "effective_sales": float(to_numeric_series(output["有效商品销售额"]).sum()),
+    }
+    return output, title, metadata
+
+
+def prepare_sales_report(uploaded_file, report_start, report_end):
+    report_type = detect_sales_report_type(uploaded_file)
+    if report_type == "business_analysis":
+        return transform_new_sales_report(uploaded_file, report_start, report_end)
+    return transform_legacy_sales_report(uploaded_file)
+
+
+def show_sales_preflight(metadata):
+    duplicate_text = ""
+    if metadata["duplicate_store_sku_rows"]:
+        duplicate_text = (
+            f"；同店鋪同SKU重複列 {metadata['duplicate_store_sku_rows']:,} 筆"
+            "（將由雲端透視表加總）"
+        )
+    st.info(
+        f"03 預檢通過｜{metadata['report_type']}｜資料 {metadata['rows']:,} 列｜"
+        f"店鋪 {metadata['stores']:,}｜SKU {metadata['skus']:,}｜"
+        f"有效銷量 {metadata['effective_quantity']:,.0f}｜"
+        f"有效銷售額 {metadata['effective_sales']:,.2f}{duplicate_text}"
+    )
+
+
+# ================= Google Sheets 存取 =================
+def get_worksheet_by_gid(spreadsheet, gid):
+    for sheet in spreadsheet.worksheets():
         if str(sheet.id) == str(gid):
             return sheet
     return None
 
+
 def retry_on_api_error(func, *args, max_retries=3, delay=5, **kwargs):
-    """
-    自動重試機制:遇到暫時性的 API 錯誤(503服務不可用、429太多請求)時，
-    會自動等待後重試，最多重試 max_retries 次。
-    """
     for attempt in range(1, max_retries + 1):
         try:
             return func(*args, **kwargs)
-        except APIError as e:
-            error_str = str(e)
-            is_temporary = "503" in error_str or "429" in error_str or "500" in error_str
-            if is_temporary and attempt < max_retries:
-                st.toast(f"⏳ 雲端服務暫時忙碌，{delay}秒後自動重試 ({attempt}/{max_retries})...")
+        except APIError as exc:
+            error_text = str(exc)
+            temporary = any(code in error_text for code in ("429", "500", "503"))
+            if temporary and attempt < max_retries:
+                st.toast(f"⏳ 雲端服務暫時忙碌，{delay} 秒後自動重試 ({attempt}/{max_retries})...")
                 time.sleep(delay)
                 continue
-            else:
-                raise
+            raise
 
-def safe_read_and_align_uploaded(uploaded_file, target_headers, task_key, header_row=0):
-    try:
-        df = pd.read_excel(uploaded_file, header=header_row)
-    except Exception as e:
-        st.error(f"❌ 無法讀取檔案 `{uploaded_file.name}`。錯誤資訊: {e}")
-        return None
-        
-    original_cols = df.columns.tolist()
-    norm_original_cols = [normalize_header(col) for col in original_cols]
-    norm_to_orig = {normalize_header(col): col for col in original_cols}
-    
-    features = SHEET_CONFIGS[task_key]["features"]
-    for f in features:
-        if normalize_header(f) not in norm_original_cols:
-            st.error(f"🚨 檔案防呆攔截：您上傳的 `{uploaded_file.name}` 找不到關鍵欄位 `{f}`！")
-            return None
-            
-    df_aligned = pd.DataFrame()
-    for target in target_headers:
-        target_norm = normalize_header(target)
-        if target_norm in norm_to_orig:
-            df_aligned[target] = df[norm_to_orig[target_norm]]
-        else:
-            df_aligned[target] = ""
-    return df_aligned[target_headers]
 
 def get_gspread_client():
-    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
     if len(st.secrets) > 0:
         try:
             if "gcp_service_account" in st.secrets:
                 secret_data = st.secrets["gcp_service_account"]
-                creds_dict = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
-                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-                return gspread.authorize(creds)
-        except Exception as e:
-            st.error(f"❌ 嘗試解析雲端 Secrets 金鑰時發生錯誤: {e}")
-            
+                credentials_dict = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
+                credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+                return gspread.authorize(credentials)
+        except Exception as exc:
+            st.error(f"❌ 嘗試解析雲端 Secrets 金鑰時發生錯誤: {exc}")
+
     if os.path.exists(SERVICE_ACCOUNT_FILE):
         try:
-            creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
-            return gspread.authorize(creds)
-        except Exception as e:
-            st.error(f"❌ 讀取本地憑證 `{SERVICE_ACCOUNT_FILE}` 失敗。錯誤: {e}")
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
+            return gspread.authorize(credentials)
+        except Exception as exc:
+            st.error(f"❌ 讀取本地憑證 `{SERVICE_ACCOUNT_FILE}` 失敗。錯誤: {exc}")
             return None
+
+    st.error("❌ 找不到 Google Sheets 服務帳戶憑證。")
     return None
 
-def upload_to_google_sheets(df, task_key, title_list=None):
-    if df is None or df.empty:
-        return
-    try:
-        client = get_gspread_client()
-        if not client: return
-        sh = client.open_by_key(SPREADSHEET_ID)
-        worksheet = get_worksheet_by_gid(sh, SHEET_CONFIGS[task_key]["gid"])
-        if not worksheet: return
-            
-        end_col = SHEET_CONFIGS[task_key]["end_col"]
-        retry_on_api_error(worksheet.batch_clear, [f"A:{end_col}"])
-        
-        data_to_upload = []
-        if title_list:
-            data_to_upload.append([("" if pd.isna(x) else x) for x in title_list])
-            data_to_upload.append(df.columns.tolist())
-        else:
-            data_to_upload.append(df.columns.tolist())
 
-        clean_df = df.fillna("")
-        for row in clean_df.values.tolist():
-            data_to_upload.append([("" if pd.isna(cell) else cell) for cell in row])
-        
-        retry_on_api_error(worksheet.update, values=data_to_upload, range_name='A1')
+def dataframe_to_google_values(df, title_list=None):
+    values = []
+    if title_list:
+        values.append([clean_cell_for_google(cell) for cell in title_list])
+    values.append([clean_cell_for_google(cell) for cell in df.columns.tolist()])
+    for row in df.itertuples(index=False, name=None):
+        values.append([clean_cell_for_google(cell) for cell in row])
+    return values
+
+
+def upload_to_google_sheets(df, task_key, title_list=None):
+    """先備份目標範圍，再清除與上傳；若失敗則嘗試還原。"""
+    if df is None or df.empty:
+        st.error(f"❌ Task {task_key} 沒有可上傳的資料。")
+        return False
+
+    client = get_gspread_client()
+    if not client:
+        return False
+
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+    worksheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS[task_key]["gid"])
+    if not worksheet:
+        st.error(f"❌ 找不到 Task {task_key} 對應的 Google Sheet。")
+        return False
+
+    end_col = SHEET_CONFIGS[task_key]["end_col"]
+    target_range = f"A:{end_col}"
+    new_values = dataframe_to_google_values(df, title_list=title_list)
+    previous_values = None
+
+    try:
+        previous_values = retry_on_api_error(worksheet.get, target_range)
+        retry_on_api_error(worksheet.batch_clear, [target_range])
+        retry_on_api_error(worksheet.update, values=new_values, range_name="A1")
         st.write(f"🟢 {worksheet.title} 數據已成功同步。")
-    except Exception as e:
-        st.error(f"❌ 雲端同步失敗 (Task {task_key})。錯誤: {e}")
+        return True
+    except Exception as exc:
+        st.error(f"❌ 雲端同步失敗 (Task {task_key})。錯誤: {exc}")
+        if previous_values:
+            try:
+                retry_on_api_error(worksheet.batch_clear, [target_range])
+                retry_on_api_error(worksheet.update, values=previous_values, range_name="A1")
+                st.warning(f"↩️ Task {task_key} 已嘗試還原上傳前資料。")
+            except Exception as rollback_exc:
+                st.error(f"🚨 Task {task_key} 還原失敗，請立即檢查雲端表格：{rollback_exc}")
+        return False
+
 
 def post_process_steps():
     try:
         client = get_gspread_client()
-        if not client: return
-        sh = client.open_by_key(SPREADSHEET_ID)
-        sheet_source = get_worksheet_by_gid(sh, SHEET_CONFIGS["03"]["gid"])
-        sheet_target = get_worksheet_by_gid(sh, SHEET_CONFIGS["target_main"]["gid"])
-        if not sheet_source or not sheet_target: return
+        if not client:
+            return False
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        source_sheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS["03"]["gid"])
+        target_sheet = get_worksheet_by_gid(spreadsheet, SHEET_CONFIGS["target_main"]["gid"])
+        if not source_sheet or not target_sheet:
+            st.error("❌ 找不到 03 或採購主表工作表。")
+            return False
 
-        raw_date_text = retry_on_api_error(sheet_source.acell, 'B1').value 
-        found_dates = re.findall(r'\d{4}-\d{2}-\d{2}', str(raw_date_text))
-        if len(found_dates) >= 2:
-            d1 = found_dates[0].replace("-", "")[4:]
-            d2 = found_dates[1].replace("-", "")[4:]
-            final_date_str = f"{d1}-{d2}"
-            retry_on_api_error(sheet_target.update, values=[[final_date_str]], range_name='B1')
-            st.write(f"📅 雲端主表 B1 日期同步完成: `{final_date_str}`")
+        raw_date_text = retry_on_api_error(source_sheet.acell, "B1").value
+        found_dates = re.findall(r"\d{4}-\d{2}-\d{2}", str(raw_date_text))
+        if len(found_dates) < 2:
+            st.error("❌ 03!B1 找不到完整的開始日與結束日，已停止後處理。")
+            return False
 
-        v_values = retry_on_api_error(sheet_source.col_values, 22)[4:] 
-        filtered_v = [[v] for v in v_values if v and str(v).strip() not in ["ZZ000-04", "總和"]]
-        retry_on_api_error(sheet_target.batch_clear, ["A3:A"]) 
-        if filtered_v:
-            retry_on_api_error(sheet_target.update, values=filtered_v, range_name='A3')
+        start_text = found_dates[0].replace("-", "")[4:]
+        end_text = found_dates[1].replace("-", "")[4:]
+        final_date_text = f"{start_text}-{end_text}"
+        retry_on_api_error(target_sheet.update, values=[[final_date_text]], range_name="B1")
+        st.write(f"📅 雲端主表 B1 日期同步完成：`{final_date_text}`")
+
+        # 等候 Google Sheets 重新計算透視表，再同步 V 欄 SKU 清單。
+        excluded = {"商品SKU", "商品SKU编号", "商品SKU編號", "總和", "总和", "Grand Total"}
+        filtered_skus = []
+        for _ in range(5):
+            # 現有 V 欄透視表前四列是標題／欄位資訊，SKU 從第 5 列開始。
+            all_values = retry_on_api_error(source_sheet.col_values, 22)[4:]
+            filtered_skus = [
+                [str(value).strip()]
+                for value in all_values
+                if value and str(value).strip() not in excluded
+            ]
+            if filtered_skus:
+                break
+            time.sleep(2)
+
+        retry_on_api_error(target_sheet.batch_clear, ["A3:A"])
+        if filtered_skus:
+            retry_on_api_error(target_sheet.update, values=filtered_skus, range_name="A3")
             st.write("🏷️ 雲端 A 欄品項條碼二次同步成功。")
-    except Exception as e:
-        st.error(f"❌ 後處理二次同步出錯: {e}")
+        else:
+            st.warning("⚠️ 03 的 V 欄透視表尚未產生 SKU，採購主表 A 欄未更新。")
+        return True
+    except Exception as exc:
+        st.error(f"❌ 後處理二次同步出錯: {exc}")
+        return False
 
-# ==================== 主畫面內容 ====================
-# 🎯 套用自訂深黑標題類別
-st.markdown('<div class="custom-main-title">📊 BigSeller 銷售數據更新系統</div>', unsafe_allow_html=True)
-st.markdown("""
-    <p style='color: #555; margin-bottom: 5px;'>請上傳對應的 Excel 報表，系統將自動進行多檔清洗、字體校正並同步至雲端。</p>
-    <p style='margin-top: 0;'>👉 <a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color: #2b5c8f; font-weight: bold; text-decoration: underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
-<p style='margin-top: 5px; font-size: 12px; color: #94a3b8;'>系統已啟用自動重試機制，遇雲端忙碌將自動處理。</p>
-    """, unsafe_allow_html=True)
-st.markdown("---")
 
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📁 01. 庫存清單</div>', unsafe_allow_html=True)
-    uploaded_files_01 = st.file_uploader("請上傳「库存清单*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="u01")
+# ================= Streamlit 畫面 =================
+PAGE_CSS = """
+<style>
+.stApp { background-color: #fcfcfc !important; color: #2b303a !important; }
+[data-testid="stSidebar"] { background-color: #f3f4f6 !important; border-right: 1px solid #e5e7eb; }
+h1, h2, h3, h4, h5, h6, p, label, .stMarkdown { color: #2b303a !important; }
+.upload-card {
+    background-color: #ffffff; padding: 24px; border-radius: 12px;
+    border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0,0,0,.05);
+    margin-bottom: 20px;
+}
+[data-testid="stFileUploader"] {
+    background-color: #fafafa !important; border: 1px dashed #cbd5e1 !important;
+    border-radius: 8px !important; padding: 10px !important;
+}
+[data-testid="stFileUploader"] section, div[data-testid="stFileUploadDropzone"] {
+    background-color: transparent !important;
+}
+button[data-testid*="stBaseButton"] {
+    background-color: #e2e8f0 !important; color: #475569 !important;
+    border: 1px solid #cbd5e1 !important; transition: all .2s ease;
+}
+button[data-testid*="stBaseButton"]:hover { background-color: #cbd5e1 !important; color: #334155 !important; }
+.custom-main-title {
+    color: #1e293b !important; font-size: 1.8rem !important; font-weight: 700 !important;
+    margin-bottom: .5rem;
+}
+.stButton > button {
+    background-color: #475569 !important; border-color: #475569 !important;
+    color: #ffffff !important; font-weight: 600 !important; font-size: 16px !important;
+    border-radius: 8px !important; padding: 12px 0 !important; transition: all .2s ease !important;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.05) !important;
+}
+.stButton > button:hover { background-color: #334155 !important; border-color: #334155 !important; color: #fff !important; }
+.stButton > button p { color: #fff !important; font-weight: 600 !important; }
+.custom-section-title {
+    color: #2b5c8f !important; font-size: 18px !important; font-weight: 600 !important;
+    margin-bottom: 12px !important; margin-top: 5px !important; display: flex; align-items: center;
+}
+div[data-testid="stToast"] {
+    background-color: #334155 !important; border: 1px solid #1e293b !important;
+    border-radius: 8px !important; box-shadow: 0 20px 25px -5px rgba(0,0,0,.1) !important;
+}
+div[data-testid="stToast"], div[data-testid="stToast"] div,
+div[data-testid="stToast"] span, div[data-testid="stToast"] p {
+    color: #fff !important; font-weight: 900 !important; font-size: 15px !important;
+}
+</style>
+"""
+
+
+def main():
+    st.set_page_config(page_title="BS銷售更新", page_icon="📊", layout="wide")
+    st.markdown(PAGE_CSS, unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="custom-main-title">📊 BigSeller 銷售數據更新系統</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <p style='color:#555;margin-bottom:5px;'>請上傳對應的 Excel 報表；系統會先驗證欄位，再同步至雲端。</p>
+        <p style='margin-top:0;'><a href='https://docs.google.com/spreadsheets/d/1FLfAbqq1TmQnXFR3rHxGkrXELrlKSMpiXGYXk7hVZm8/edit?gid=1324377276#gid=1324377276' target='_blank' style='color:#2b5c8f;font-weight:bold;text-decoration:underline;'>📊 點此打開 Google Sheets 雲端主表</a></p>
+        <p style='margin-top:5px;font-size:12px;color:#94a3b8;'>系統已啟用欄位防呆、上傳前備份與雲端暫時性錯誤重試。</p>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📁 01. 庫存清單</div>', unsafe_allow_html=True)
+        uploaded_files_01 = st.file_uploader(
+            "請上傳「库存清单*.xlsx」檔案（可多選）",
+            type=["xlsx"], accept_multiple_files=True, key="u01",
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
+        uploaded_files_lan = st.file_uploader(
+            "① 請上傳「懶餅乾*.xlsx」檔案（可多選）",
+            type=["xlsx"], accept_multiple_files=True, key="ulan",
+        )
+        uploaded_files_onl = st.file_uploader(
+            "② 請上傳「其他店鋪」的檔案（可多選）",
+            type=["xlsx"], accept_multiple_files=True, key="uonl",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
+        uploaded_file_03 = st.file_uploader(
+            "請上傳新版「经营分析_店铺SKU_按店铺SKU导出*.xlsx」或舊版「销量报告*.xlsx」（單選）",
+            type=["xlsx"], key="u03",
+        )
+        st.caption("新版請使用：店鋪SKU／按SKU聚合／下單時間／已支付／不看測評訂單／不看贈品。")
+        date_col1, date_col2 = st.columns(2)
+        with date_col1:
+            report_start = st.date_input("03 報表開始日（新版必填）", value=None, key="u03_start")
+        with date_col2:
+            report_end = st.date_input("03 報表結束日（新版必填）", value=None, key="u03_end")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
+        uploaded_file_04 = st.file_uploader(
+            "請上傳「商品利润*.xlsx」檔案（單選）",
+            type=["xlsx"], key="u04",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📁 02. 在線產品 更新促銷價</div>', unsafe_allow_html=True)
-    uploaded_files_lan = st.file_uploader("① 請上傳「懶餅乾*.xlsx」檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="ulan")
-    uploaded_files_onl = st.file_uploader("② 請上傳「其他店鋪」的檔案 (可多選)", type=["xlsx"], accept_multiple_files=True, key="uonl")
-    st.markdown("</div>", unsafe_allow_html=True)
 
-with col2:
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📁 03. 銷量報告</div>', unsafe_allow_html=True)
-    uploaded_file_03 = st.file_uploader("請上傳「销量报告*.xlsx」檔案 (單選)", type=["xlsx"], key="u03")
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<div class="custom-section-title">📁 04. 利潤報告</div>', unsafe_allow_html=True)
-    uploaded_file_04 = st.file_uploader("請上傳「商品利润*.xlsx」檔案 (單選)", type=["xlsx"], key="u04")
-    st.markdown("</div>", unsafe_allow_html=True)
+    if not st.button("🔥 啟動自動化整合全流程", type="primary", use_container_width=True):
+        return
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# 🎯 這裡的 Button 就會自動套用 CSS 變成優雅的冷岩灰藍底色囉！
-if st.button("🔥 啟動自動化整合全流程", type="primary", use_container_width=True):
     if not (uploaded_files_01 or uploaded_files_lan or uploaded_files_onl or uploaded_file_03 or uploaded_file_04):
         st.error("🚨 流程終止：您尚未上傳任何 Excel 檔案。")
+        return
+
+    start_time = time.time()
+    has_error = False
+    task03_uploaded = False
+
+    with st.spinner("系統正在驗證並同步數據，請稍候..."):
+        if uploaded_files_01:
+            st.toast("⏳ 正在處理 01.庫存清單...")
+            dataframes = []
+            for file in uploaded_files_01:
+                result = safe_read_and_align_uploaded(file, HEADERS_01, "01")
+                if result is None:
+                    has_error = True
+                else:
+                    dataframes.append(result)
+            if dataframes:
+                df01 = pd.concat(dataframes, ignore_index=True)
+                if not upload_to_google_sheets(df01, "01"):
+                    has_error = True
+
+        if uploaded_files_lan or uploaded_files_onl:
+            st.toast("⏳ 正在處理 02.在線產品更新...")
+            lan_dataframes, other_dataframes = [], []
+            for file in uploaded_files_lan:
+                result = safe_read_and_align_uploaded(file, HEADERS_02, "02")
+                if result is None:
+                    has_error = True
+                else:
+                    lan_dataframes.append(result)
+            for file in uploaded_files_onl:
+                result = safe_read_and_align_uploaded(file, HEADERS_02, "02")
+                if result is None:
+                    has_error = True
+                else:
+                    other_dataframes.append(result)
+
+            df_lan = (
+                pd.concat(lan_dataframes, ignore_index=True).drop_duplicates(subset=["SKU"])
+                if lan_dataframes else pd.DataFrame(columns=HEADERS_02)
+            )
+            df_other = (
+                pd.concat(other_dataframes, ignore_index=True).drop_duplicates(subset=["SKU"])
+                if other_dataframes else pd.DataFrame(columns=HEADERS_02)
+            )
+            df02 = pd.concat([df_lan, df_other], ignore_index=True)
+            if not df02.empty:
+                df02["priority"] = df02["店铺昵称"].apply(
+                    lambda value: 0 if value == "02-懶餅乾家居" else 1
+                )
+                df02 = (
+                    df02.sort_values(by=["SKU", "priority"])
+                    .drop_duplicates(subset=["SKU"], keep="first")
+                    .drop(columns=["priority"])
+                )
+                if not upload_to_google_sheets(df02, "02"):
+                    has_error = True
+
+        if uploaded_file_03:
+            st.toast("⏳ 正在處理 03.銷量報告...")
+            try:
+                df03, title03, metadata03 = prepare_sales_report(
+                    uploaded_file_03, report_start, report_end
+                )
+                show_sales_preflight(metadata03)
+                task03_uploaded = upload_to_google_sheets(df03, "03", title_list=title03)
+                if not task03_uploaded:
+                    has_error = True
+            except Exception as exc:
+                st.error(f"❌ 03 報表處理失敗：{exc}")
+                has_error = True
+
+        if uploaded_file_04:
+            st.toast("⏳ 正在處理 04.利潤報告...")
+            try:
+                title04 = read_excel(uploaded_file_04, nrows=1, header=None).values.tolist()[0]
+                df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
+                if df04 is None or not upload_to_google_sheets(df04, "04", title_list=title04):
+                    has_error = True
+            except Exception as exc:
+                st.error(f"❌ 04 報表處理失敗：{exc}")
+                has_error = True
+
+        if task03_uploaded and not post_process_steps():
+            has_error = True
+
+    if has_error:
+        st.warning("⚠️ 流程已結束，但過程中發生錯誤；請依畫面訊息檢查。")
     else:
-        start_time = time.time()
-        has_error = False
-        with st.spinner("系統正在全速同步數據，請稍候..."):
-            if uploaded_files_01:
-                st.toast("⏳ 正在處理 01.庫存清單...")
-                list_dfs = []
-                for f in uploaded_files_01:
-                    res_df = safe_read_and_align_uploaded(f, HEADERS_01, "01")
-                    if res_df is not None: list_dfs.append(res_df)
-                    else: has_error = True
-                if list_dfs:
-                    df01 = pd.concat(list_dfs, ignore_index=True)
-                    upload_to_google_sheets(df01, "01")
+        st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
 
-            if uploaded_files_lan or uploaded_files_onl:
-                st.toast("⏳ 正在處理 02.在線產品更新...")
-                lan_dfs, onl_dfs = [], []
-                for f in uploaded_files_lan:
-                    res_df = safe_read_and_align_uploaded(f, HEADERS_02, "02")
-                    if res_df is not None: lan_dfs.append(res_df)
-                    else: has_error = True
-                for f in uploaded_files_onl:
-                    res_df = safe_read_and_align_uploaded(f, HEADERS_02, "02")
-                    if res_df is not None: onl_dfs.append(res_df)
-                    else: has_error = True
-                df_lan = pd.concat(lan_dfs, ignore_index=True).drop_duplicates(subset=['SKU']) if lan_dfs else pd.DataFrame(columns=HEADERS_02)
-                df_onl = pd.concat(onl_dfs, ignore_index=True).drop_duplicates(subset=['SKU']) if onl_dfs else pd.DataFrame(columns=HEADERS_02)
-                df02 = pd.concat([df_lan, df_onl], ignore_index=True)
-                if not df02.empty:
-                    df02['priority'] = df02['店铺昵称'].apply(lambda x: 0 if x == "02-懶餅乾家居" else 1)
-                    df02 = df02.sort_values(by=['SKU', 'priority']).drop_duplicates(subset=['SKU'], keep='first').drop(columns=['priority'])
-                    upload_to_google_sheets(df02, "02")
 
-            if uploaded_file_03:
-                st.toast("⏳ 正在處理 03.銷量報告...")
-                try:
-                    t03 = pd.read_excel(uploaded_file_03, nrows=1, header=None).values.tolist()[0]
-                    df03 = safe_read_and_align_uploaded(uploaded_file_03, HEADERS_03, "03", header_row=1)
-                    if df03 is not None: upload_to_google_sheets(df03, "03", title_list=t03)
-                    else: has_error = True
-                except Exception as e: has_error = True
-
-            if uploaded_file_04:
-                st.toast("⏳ 正在處理 04.利潤報告...")
-                try:
-                    t04 = pd.read_excel(uploaded_file_04, nrows=1, header=None).values.tolist()[0]
-                    df04 = safe_read_and_align_uploaded(uploaded_file_04, HEADERS_04, "04", header_row=1)
-                    if df04 is not None: upload_to_google_sheets(df04, "04", title_list=t04)
-                    else: has_error = True
-                except Exception as e: has_error = True
-
-            if uploaded_file_03 and not has_error:
-                post_process_steps()
-                
-        if has_error:
-            st.warning("⚠️ 流程已結束，但過程中發生過上述錯誤攔截，請檢查修正。")
-        else:
-            st.success(f"✨ 全部自動化流程已執行完畢！總耗時：{round(time.time() - start_time, 2)} 秒")
+if __name__ == "__main__":
+    main()
